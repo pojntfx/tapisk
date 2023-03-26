@@ -4,10 +4,6 @@ import (
 	"errors"
 	"os"
 	"sync"
-	"syscall"
-	"unsafe"
-
-	"github.com/pojntfx/tapisk/pkg/ioctl"
 )
 
 var (
@@ -16,11 +12,12 @@ var (
 
 type TapeBackend struct {
 	device *os.File
+	size   int64
 	lock   sync.Mutex
 }
 
-func NewTapeBackend(device *os.File) *TapeBackend {
-	return &TapeBackend{device, sync.Mutex{}}
+func NewTapeBackend(device *os.File, size int64) *TapeBackend {
+	return &TapeBackend{device, size, sync.Mutex{}}
 }
 
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
@@ -32,19 +29,7 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 func (b *TapeBackend) Size() (int64, error) {
-	// TODO: We can't get the capacity of a tape drive, pass it in instead
-
-	mtget := &ioctl.Mtget{}
-	if _, _, err := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		b.device.Fd(),
-		ioctl.MTIOCGET,
-		uintptr(unsafe.Pointer(mtget)),
-	); err != 0 {
-		return -1, err
-	}
-
-	return int64(mtget.Blkno()), nil
+	return b.size, nil
 }
 
 func (b *TapeBackend) Sync() error {

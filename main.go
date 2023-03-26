@@ -12,6 +12,7 @@ import (
 
 func main() {
 	file := flag.String("file", "/dev/nst0", "Path to device file to connect to")
+	size := flag.Int64("size", 2.5*1024*1024*1024*1024*1024, "Size of the tape to expose (native size, not compressed size)")
 	laddr := flag.String("laddr", ":10809", "Listen address")
 	network := flag.String("network", "tcp", "Listen network (e.g. `tcp` or `unix`)")
 	name := flag.String("name", "default", "Export name")
@@ -45,7 +46,7 @@ func main() {
 	}
 	defer f.Close()
 
-	b := backend.NewTapeBackend(f)
+	b := backend.NewTapeBackend(f, *size)
 
 	clients := 0
 	for {
