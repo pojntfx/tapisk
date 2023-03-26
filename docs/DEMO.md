@@ -22,6 +22,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now mhvtl.target
 
 lsscsi -g
-sudo mtx -f /dev/sg0 status
-sudo mt -f /dev/st0 status
+sudo mtx -f /dev/sg1 status
+sudo mtx -f /dev/sg1 load 1 # Loads into `/dev/st4`
+sudo mt -f /dev/st4 status
 ```
