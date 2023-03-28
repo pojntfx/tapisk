@@ -29,6 +29,7 @@ func main() {
 	b := backend.NewTapeBackend(f, *size, blocksize)
 
 	{
+		// Write and read
 		input := make([]byte, blocksize)
 		copy(input, []byte("First message body"))
 		if _, err := b.WriteAt(input, 0); err != nil {
@@ -44,8 +45,9 @@ func main() {
 	}
 
 	{
+		// Overwrite and read
 		input := make([]byte, blocksize)
-		copy(input, []byte("Second message body"))
+		copy(input, []byte("Overwrite message body"))
 		if _, err := b.WriteAt(input, 0); err != nil {
 			panic(err)
 		}
@@ -55,6 +57,46 @@ func main() {
 			panic(err)
 		}
 
-		log.Println("Second message:", string(input), string(output), string(input) == string(output))
+		log.Println("Overwrite:", string(input), string(output), string(input) == string(output))
+	}
+
+	{
+		// Write and read part of a block
+		input := []byte("Part of a block")
+
+		inputBlock := make([]byte, blocksize)
+		copy(inputBlock, input)
+		if _, err := b.WriteAt(inputBlock, 0); err != nil {
+			panic(err)
+		}
+
+		output := make([]byte, len(input)-3)
+		if _, err := b.ReadAt(output, 3); err != nil {
+			panic(err)
+		}
+
+		log.Println("Part of a block:", string(inputBlock), string(output), string(inputBlock) == string(output))
+	}
+
+	{
+		// Write and read part of a second block
+		input := []byte("Part of a second block")
+
+		if _, err := b.WriteAt(make([]byte, blocksize), 0); err != nil {
+			panic(err)
+		}
+
+		inputBlock := make([]byte, blocksize)
+		copy(inputBlock, input)
+		if _, err := b.WriteAt(inputBlock, int64(blocksize)); err != nil {
+			panic(err)
+		}
+
+		output := make([]byte, len(input)-3)
+		if _, err := b.ReadAt(output, int64(blocksize)+3); err != nil {
+			panic(err)
+		}
+
+		log.Println("Part of a block:", string(inputBlock), string(output), string(inputBlock) == string(output))
 	}
 }

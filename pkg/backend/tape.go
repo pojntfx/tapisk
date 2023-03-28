@@ -2,6 +2,7 @@ package backend
 
 import (
 	"errors"
+	"io"
 	"os"
 	"sync"
 	"syscall"
@@ -43,18 +44,24 @@ func (b *TapeBackend) seekToBlock(block int32) error {
 	return nil
 }
 
+func (b *TapeBackend) discardBytes(count int64) error {
+	if _, err := io.CopyN(io.Discard, b.drive, count); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
-	if len(p) != int(b.blocksize) {
-		return -1, ErrInvalidChunkSize
-	}
-
-	if off%int64(b.blocksize) != 0 {
-		return -1, ErrInvalidOffset
-	}
-
 	b.lock.Lock()
 
 	if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
+		b.lock.Unlock()
+
+		return -1, err
+	}
+
+	if err := b.discardBytes(off % int64(b.blocksize)); err != nil {
 		b.lock.Unlock()
 
 		return -1, err
