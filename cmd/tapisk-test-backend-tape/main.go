@@ -30,7 +30,7 @@ func main() {
 
 	{
 		input := make([]byte, blocksize)
-		copy(input, []byte("Hello, world!"))
+		copy(input, []byte("First message body"))
 		if _, err := b.WriteAt(input, 0); err != nil {
 			panic(err)
 		}
@@ -40,6 +40,21 @@ func main() {
 			panic(err)
 		}
 
-		log.Println(string(output))
+		log.Println("First message:", string(input), string(output), string(input) == string(output))
+	}
+
+	{
+		input := make([]byte, blocksize)
+		copy(input, []byte("Second message body"))
+		if _, err := b.WriteAt(input, 0); err != nil {
+			panic(err)
+		}
+
+		output := make([]byte, blocksize)
+		if _, err := b.ReadAt(output, 0); err != nil {
+			panic(err)
+		}
+
+		log.Println("Second message:", string(input), string(output), string(input) == string(output))
 	}
 }
