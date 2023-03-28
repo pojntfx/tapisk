@@ -26,7 +26,7 @@ func main() {
 		panic(err)
 	}
 
-	b := backend.NewTapeBackend(f, *size)
+	b := backend.NewTapeBackend(f, *size, blocksize)
 
 	{
 		input := make([]byte, blocksize)

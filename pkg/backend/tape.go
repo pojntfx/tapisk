@@ -8,20 +8,31 @@ import (
 )
 
 var (
-	errNotImplemented = errors.New("not implemented")
+	ErrNotImplemented   = errors.New("not implemented")
+	ErrInvalidChunkSize = errors.New("chunk does not match block size")
+	ErrInvalidOffset    = errors.New("offset is not a multiple of 512")
 )
 
 type TapeBackend struct {
-	drive *os.File
-	size  int64
-	lock  sync.Mutex
+	drive     *os.File
+	size      int64
+	blocksize uint64
+	lock      sync.Mutex
 }
 
-func NewTapeBackend(drive *os.File, size int64) *TapeBackend {
-	return &TapeBackend{drive, size, sync.Mutex{}}
+func NewTapeBackend(drive *os.File, size int64, blocksize uint64) *TapeBackend {
+	return &TapeBackend{drive, size, blocksize, sync.Mutex{}}
 }
 
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
+	if len(p) != int(b.blocksize) {
+		return -1, ErrInvalidChunkSize
+	}
+
+	if off%int64(b.blocksize) != 0 {
+		return -1, ErrInvalidOffset
+	}
+
 	b.lock.Lock()
 
 	_, err = b.drive.Seek(off, io.SeekStart)
@@ -39,6 +50,14 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
+	if len(p) != int(b.blocksize) {
+		return -1, ErrInvalidChunkSize
+	}
+
+	if off%int64(b.blocksize) != 0 {
+		return -1, ErrInvalidOffset
+	}
+
 	b.lock.Lock()
 
 	_, err = b.drive.Seek(off, io.SeekStart)
@@ -60,5 +79,5 @@ func (b *TapeBackend) Size() (int64, error) {
 }
 
 func (b *TapeBackend) Sync() error {
-	return errNotImplemented
+	return ErrNotImplemented
 }
