@@ -11,7 +11,6 @@ import (
 )
 
 var (
-	ErrNotImplemented   = errors.New("not implemented")
 	ErrInvalidChunkSize = errors.New("chunk does not match block size")
 	ErrInvalidOffset    = errors.New("offset is not a multiple of 512")
 )
@@ -97,5 +96,6 @@ func (b *TapeBackend) Size() (int64, error) {
 }
 
 func (b *TapeBackend) Sync() error {
-	return ErrNotImplemented
+	// nop, tapes are unbuffered
+	return nil
 }

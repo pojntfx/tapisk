@@ -8,19 +8,17 @@ import (
 
 	"github.com/pojntfx/go-nbd/pkg/server"
 	"github.com/pojntfx/tapisk/pkg/backend"
+	"github.com/pojntfx/tapisk/pkg/utils"
 )
 
 func main() {
-	file := flag.String("file", "/dev/nst0", "Path to device file to connect to")
+	file := flag.String("file", "/dev/nst4", "Path to device file to connect to")
 	size := flag.Int64("size", 2.5*1024*1024*1024*1024*1024, "Size of the tape to expose (native size, not compressed size)")
 	laddr := flag.String("laddr", ":10809", "Listen address")
 	network := flag.String("network", "tcp", "Listen network (e.g. `tcp` or `unix`)")
 	name := flag.String("name", "default", "Export name")
 	description := flag.String("description", "The default export", "Export description")
 	readOnly := flag.Bool("read-only", false, "Whether the export should be read-only")
-	minimumBlockSize := flag.Uint("minimum-block-size", 1, "Minimum block size")
-	preferredBlockSize := flag.Uint("preferred-block-size", 4096, "Preferred block size")
-	maximumBlockSize := flag.Uint("maximum-block-size", 0xffffffff, "Maximum block size")
 
 	flag.Parse()
 
@@ -34,19 +32,24 @@ func main() {
 
 	var f *os.File
 	if *readOnly {
-		f, err = os.OpenFile(*file, os.O_RDONLY, 0644)
+		f, err = os.OpenFile(*file, os.O_RDONLY, os.ModeCharDevice)
 		if err != nil {
 			panic(err)
 		}
 	} else {
-		f, err = os.OpenFile(*file, os.O_RDWR, 0644)
+		f, err = os.OpenFile(*file, os.O_RDWR, os.ModeCharDevice)
 		if err != nil {
 			panic(err)
 		}
 	}
 	defer f.Close()
 
-	b := backend.NewTapeBackend(f, *size)
+	blocksize, err := utils.GetBlocksize(f)
+	if err != nil {
+		panic(err)
+	}
+
+	b := backend.NewTapeBackend(f, *size, blocksize)
 
 	clients := 0
 	for {
@@ -85,9 +88,9 @@ func main() {
 				},
 				&server.Options{
 					ReadOnly:           *readOnly,
-					MinimumBlockSize:   uint32(*minimumBlockSize),
-					PreferredBlockSize: uint32(*preferredBlockSize),
-					MaximumBlockSize:   uint32(*maximumBlockSize),
+					MinimumBlockSize:   uint32(blocksize),
+					PreferredBlockSize: uint32(blocksize),
+					MaximumBlockSize:   uint32(blocksize),
 				}); err != nil {
 				panic(err)
 			}
