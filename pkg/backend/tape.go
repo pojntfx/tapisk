@@ -26,10 +26,10 @@ func NewTapeBackend(drive *os.File, size int64, blocksize uint64) *TapeBackend {
 	return &TapeBackend{drive, size, blocksize, sync.Mutex{}}
 }
 
-func (b *TapeBackend) seek(off int64) error {
+func (b *TapeBackend) seekToBlock(block int32) error {
 	mtop := &ioctl.Mtop{}
 	mtop.SetOp(ioctl.MTSEEK)
-	mtop.SetCount(int32(off / int64(b.blocksize)))
+	mtop.SetCount(block)
 
 	if _, _, err := syscall.Syscall(
 		syscall.SYS_IOCTL,
@@ -54,7 +54,7 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 
 	b.lock.Lock()
 
-	if err = b.seek(off); err != nil {
+	if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
 		b.lock.Unlock()
 
 		return -1, err
@@ -78,7 +78,7 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 
 	b.lock.Lock()
 
-	if err = b.seek(off); err != nil {
+	if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
 		b.lock.Unlock()
 
 		return -1, err
