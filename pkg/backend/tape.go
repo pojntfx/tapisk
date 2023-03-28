@@ -2,9 +2,12 @@ package backend
 
 import (
 	"errors"
-	"io"
 	"os"
 	"sync"
+	"syscall"
+	"unsafe"
+
+	"github.com/pojntfx/tapisk/pkg/ioctl"
 )
 
 var (
@@ -24,6 +27,23 @@ func NewTapeBackend(drive *os.File, size int64, blocksize uint64) *TapeBackend {
 	return &TapeBackend{drive, size, blocksize, sync.Mutex{}}
 }
 
+func (b *TapeBackend) seek(off int64) error {
+	mtop := &ioctl.Mtop{}
+	mtop.SetOp(ioctl.MTSEEK)
+	mtop.SetCount(int32(off / int64(b.blocksize)))
+
+	if _, _, err := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		b.drive.Fd(),
+		ioctl.MTIOCTOP,
+		uintptr(unsafe.Pointer(mtop)),
+	); err != 0 {
+		return err
+	}
+
+	return nil
+}
+
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 	if len(p) != int(b.blocksize) {
 		return -1, ErrInvalidChunkSize
@@ -35,8 +55,7 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 
 	b.lock.Lock()
 
-	_, err = b.drive.Seek(off, io.SeekStart)
-	if err != nil {
+	if err = b.seek(off); err != nil {
 		b.lock.Unlock()
 
 		return -1, err
@@ -60,8 +79,7 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 
 	b.lock.Lock()
 
-	_, err = b.drive.Seek(off, io.SeekStart)
-	if err != nil {
+	if err = b.seek(off); err != nil {
 		b.lock.Unlock()
 
 		return -1, err

@@ -9,13 +9,26 @@ import "C"
 
 const (
 	MTIOCGET = C.MTIOCGET
+	MTIOCTOP = C.MTIOCTOP
 
 	MT_ST_BLKSIZE_MASK  = C.MT_ST_BLKSIZE_MASK
 	MT_ST_BLKSIZE_SHIFT = C.MT_ST_BLKSIZE_SHIFT
+
+	MTSEEK = C.MTSEEK
 )
 
 type Mtget C.struct_mtget
 
 func (m Mtget) Dsreg() uint64 {
 	return uint64(m.mt_dsreg)
+}
+
+type Mtop C.struct_mtop
+
+func (m *Mtop) SetOp(v int16) {
+	m.mt_op = C.short(v)
+}
+
+func (m *Mtop) SetCount(v int32) {
+	m.mt_count = C.int(v)
 }
