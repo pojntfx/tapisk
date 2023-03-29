@@ -11,7 +11,7 @@ import (
 
 func main() {
 	file := flag.String("file", "/dev/nst4", "Path to device file to connect to")
-	size := flag.Int64("size", 2.5*1024*1024*1024*1024*1024, "Size of the tape to expose (native size, not compressed size)")
+	size := flag.Int64("size", 500*1024*1024, "Size of the tape to expose (native size, not compressed size)")
 
 	flag.Parse()
 
@@ -24,6 +24,16 @@ func main() {
 	blocksize, err := utils.GetBlocksize(f)
 	if err != nil {
 		panic(err)
+	}
+
+	// Initialize tape
+	p := make([]byte, blocksize)
+	for i := uint64(0); i < (uint64(*size) / blocksize); i++ {
+		log.Println(i, (uint64(*size) / blocksize))
+
+		if _, err := f.Write(p); err != nil {
+			panic(err)
+		}
 	}
 
 	b := backend.NewTapeBackend(f, *size, blocksize)

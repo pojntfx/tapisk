@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"errors"
 	"io"
 	"os"
 	"sync"
@@ -9,11 +8,6 @@ import (
 	"unsafe"
 
 	"github.com/pojntfx/tapisk/pkg/ioctl"
-)
-
-var (
-	ErrInvalidChunkSize = errors.New("chunk does not match block size")
-	ErrInvalidOffset    = errors.New("offset is not a multiple of 512")
 )
 
 type TapeBackend struct {
@@ -75,23 +69,44 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
-	if len(p) != int(b.blocksize) {
-		return -1, ErrInvalidChunkSize
-	}
-
-	if off%int64(b.blocksize) != 0 {
-		return -1, ErrInvalidOffset
-	}
-
 	b.lock.Lock()
 
-	if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
+	startBlock := off / int64(b.blocksize)
+	startOffset := off % int64(b.blocksize)
+	endBlock := (off + int64(len(p))) / int64(b.blocksize)
+	endOffset := (off + int64(len(p))) % int64(b.blocksize)
+
+	c := make([]byte, (endBlock-startBlock)*int64(b.blocksize))
+
+	if err = b.seekToBlock(int32(startBlock)); err != nil {
 		b.lock.Unlock()
 
 		return -1, err
 	}
 
-	n, err = b.drive.Write(p)
+	_, err = b.drive.Read(c)
+	if err != nil {
+		b.lock.Unlock()
+
+		return -1, err
+	}
+
+	n = copy(c[startOffset:len(c)-int(endOffset)], p)
+
+	if err = b.seekToBlock(int32(startBlock)); err != nil {
+		b.lock.Unlock()
+
+		return -1, err
+	}
+
+	for i := uint64(0); i < uint64((endBlock - startBlock)); i++ {
+		_, err = b.drive.Write(c[i*b.blocksize : (i+1)*b.blocksize])
+		if err != nil {
+			b.lock.Unlock()
+
+			return -1, err
+		}
+	}
 
 	b.lock.Unlock()
 
