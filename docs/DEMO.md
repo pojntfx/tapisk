@@ -27,25 +27,25 @@ sudo usermod -a -G tape ${USER}
 newgrp tape
 
 mtx -f /dev/sg1 status
-mtx -f /dev/sg1 load 1 # Loads into `/dev/st4`
-mt -f /dev/st4 status
+mtx -f /dev/sg1 load 1 # Loads into `/dev/st6`
+mt -f /dev/st6 status
 
-mt -f /dev/nst4 setblk 512
+mt -f /dev/nst6 setblk 512
 
-tar cvf /dev/st4 .
-tar tvf /dev/st4
+tar cvf /dev/st6 .
+tar tvf /dev/st6
 
-mt -f /dev/nst4 rewind
-mt -f /dev/nst4 tell
+mt -f /dev/nst6 rewind
+mt -f /dev/nst6 tell
 
-tar cvf /dev/nst4 .
-mt -f /dev/nst4 tell
+tar cvf /dev/nst6 .
+mt -f /dev/nst6 tell
 
-mt -f /dev/nst4 rewind
-tar tvf /dev/nst4
-mt -f /dev/nst4 tell
+mt -f /dev/nst6 rewind
+tar tvf /dev/nst6
+mt -f /dev/nst6 tell
 
-mt -f /dev/nst4 rewind
-mt -f /dev/nst4 erase
-mt -f /dev/nst4 rewind
+mt -f /dev/nst6 rewind
+mt -f /dev/nst6 erase
+mt -f /dev/nst6 rewind
 ```

@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	file := flag.String("file", "/dev/nst4", "Path to device file to connect to")
+	file := flag.String("file", "/dev/nst6", "Path to device file to connect to")
 	size := flag.Int64("size", 500*1024*1024, "Size of the tape to expose (native size, not compressed size)")
 	laddr := flag.String("laddr", ":10809", "Listen address")
 	network := flag.String("network", "tcp", "Listen network (e.g. `tcp` or `unix`)")

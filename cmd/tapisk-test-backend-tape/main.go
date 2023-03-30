@@ -10,8 +10,9 @@ import (
 )
 
 func main() {
-	file := flag.String("file", "/dev/nst4", "Path to device file to connect to")
-	size := flag.Int64("size", 500*1024*1024, "Size of the tape to expose (native size, not compressed size)")
+	file := flag.String("file", "/dev/nst6", "Path to device file to connect to")
+	size := flag.Int64("size", 5*1024*1024, "Size of the tape to expose (native size, not compressed size)")
+	compat := flag.Bool("compat", false, "Whether to not emulate all SCSI commands using manual seeks")
 
 	flag.Parse()
 
@@ -36,7 +37,7 @@ func main() {
 		}
 	}
 
-	b := backend.NewTapeBackend(f, *size, blocksize)
+	b := backend.NewTapeBackend(f, *size, blocksize, *compat)
 
 	{
 		// Write and read
