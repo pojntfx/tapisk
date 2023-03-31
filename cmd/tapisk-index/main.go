@@ -8,18 +8,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dgraph-io/badger/v3"
+	"go.etcd.io/bbolt"
 )
 
 func main() {
 	file := flag.String("file", filepath.Join(os.TempDir(), "tapisk.db"), "Path to index DB")
+	bucket := flag.String("bucket", "tapisk", "Bucket to store the index in")
 
 	flag.Parse()
 
-	opts := badger.DefaultOptions(*file)
-	opts = opts.WithLoggingLevel(badger.ERROR)
-
-	db, err := badger.Open(opts)
+	db, err := bbolt.Open(*file, os.ModePerm, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -28,48 +26,43 @@ func main() {
 	key := make([]byte, 8) // uint64
 	binary.BigEndian.PutUint64(key, uint64(5))
 
-	{
-		tx := db.NewTransaction(true)
+	if err := db.Update(func(tx *bbolt.Tx) (err error) {
+		_, err = tx.CreateBucketIfNotExists([]byte(*bucket))
+
+		return
+	}); err != nil {
+		panic(err)
+	}
+
+	if err := db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(*bucket))
 
 		value := make([]byte, 8) // uint64
 		binary.BigEndian.PutUint64(value, uint64(80))
 
-		if err := tx.Set(key, value); err != nil {
-			tx.Discard()
-
-			panic(err)
+		if err := bucket.Put(key, value); err != nil {
+			return err
 		}
 
-		if err := tx.Commit(); err != nil {
-			panic(err)
-		}
+		return nil
+	}); err != nil {
+		panic(err)
 	}
 
-	{
-		tx := db.NewTransaction(false)
+	if err := db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(*bucket))
 
-		item, err := tx.Get(key)
-		if err != nil {
-			tx.Discard()
+		item := bucket.Get(key)
 
-			panic(err)
+		var value uint64
+		if err := binary.Read(bytes.NewReader(item), binary.BigEndian, &value); err != nil {
+			return err
 		}
 
-		if err := item.Value(func(val []byte) error {
-			var value uint64
-			if err := binary.Read(bytes.NewReader(val), binary.BigEndian, &value); err != nil {
-				return err
-			}
+		log.Println(value)
 
-			log.Println(value)
-
-			return nil
-		}); err != nil {
-			tx.Discard()
-
-			panic(err)
-		}
-
-		tx.Discard()
+		return nil
+	}); err != nil {
+		panic(err)
 	}
 }
