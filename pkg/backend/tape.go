@@ -15,12 +15,10 @@ type TapeBackend struct {
 	size      int64
 	blocksize uint64
 	lock      sync.Mutex
-	compat    bool
-	cursor    int
 }
 
-func NewTapeBackend(drive *os.File, size int64, blocksize uint64, compat bool) *TapeBackend {
-	return &TapeBackend{drive, size, blocksize, sync.Mutex{}, compat, 0}
+func NewTapeBackend(drive *os.File, size int64, blocksize uint64) *TapeBackend {
+	return &TapeBackend{drive, size, blocksize, sync.Mutex{}}
 }
 
 func (b *TapeBackend) seekToBlock(block int32) error {
@@ -51,24 +49,16 @@ func (b *TapeBackend) discardBytes(count int64) error {
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 	b.lock.Lock()
 
-	if b.compat {
-		if _, err := b.drive.Seek(off, io.SeekStart); err != nil {
-			b.lock.Unlock()
+	if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
+		b.lock.Unlock()
 
-			return -1, err
-		}
-	} else {
-		if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
-			b.lock.Unlock()
+		return -1, err
+	}
 
-			return -1, err
-		}
+	if err := b.discardBytes(off % int64(b.blocksize)); err != nil {
+		b.lock.Unlock()
 
-		if err := b.discardBytes(off % int64(b.blocksize)); err != nil {
-			b.lock.Unlock()
-
-			return -1, err
-		}
+		return -1, err
 	}
 
 	n, err = b.drive.Read(p)
@@ -88,18 +78,10 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 
 	c := make([]byte, (endBlock-startBlock)*int64(b.blocksize))
 
-	if b.compat {
-		if _, err := b.drive.Seek(startBlock*int64(b.blocksize), io.SeekStart); err != nil {
-			b.lock.Unlock()
+	if err = b.seekToBlock(int32(startBlock)); err != nil {
+		b.lock.Unlock()
 
-			return -1, err
-		}
-	} else {
-		if err = b.seekToBlock(int32(startBlock)); err != nil {
-			b.lock.Unlock()
-
-			return -1, err
-		}
+		return -1, err
 	}
 
 	_, err = b.drive.Read(c)
@@ -111,18 +93,10 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 
 	n = copy(c[startOffset:len(c)-int(endOffset)], p)
 
-	if b.compat {
-		if _, err := b.drive.Seek(startBlock*int64(b.blocksize), io.SeekStart); err != nil {
-			b.lock.Unlock()
+	if err = b.seekToBlock(int32(startBlock)); err != nil {
+		b.lock.Unlock()
 
-			return -1, err
-		}
-	} else {
-		if err = b.seekToBlock(int32(startBlock)); err != nil {
-			b.lock.Unlock()
-
-			return -1, err
-		}
+		return -1, err
 	}
 
 	for i := uint64(0); i < uint64((endBlock - startBlock)); i++ {
