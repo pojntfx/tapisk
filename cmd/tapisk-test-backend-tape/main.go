@@ -6,13 +6,12 @@ import (
 	"os"
 
 	"github.com/pojntfx/tapisk/pkg/backend"
-	"github.com/pojntfx/tapisk/pkg/utils"
+	"github.com/pojntfx/tapisk/pkg/mtio"
 )
 
 func main() {
 	file := flag.String("file", "/dev/nst6", "Path to device file to connect to")
 	size := flag.Int64("size", 5*1024*1024, "Size of the tape to expose (native size, not compressed size)")
-	compat := flag.Bool("compat", false, "Whether to not emulate all SCSI commands using manual seeks")
 
 	flag.Parse()
 
@@ -22,7 +21,7 @@ func main() {
 	}
 	defer f.Close()
 
-	blocksize, err := utils.GetBlocksize(f)
+	blocksize, err := mtio.GetBlocksize(f)
 	if err != nil {
 		panic(err)
 	}
@@ -37,7 +36,7 @@ func main() {
 		}
 	}
 
-	b := backend.NewTapeBackend(f, *size, blocksize, *compat)
+	b := backend.NewTapeBackend(f, *size, blocksize)
 
 	{
 		// Write and read

@@ -8,7 +8,7 @@ import (
 
 	"github.com/pojntfx/go-nbd/pkg/server"
 	"github.com/pojntfx/tapisk/pkg/backend"
-	"github.com/pojntfx/tapisk/pkg/utils"
+	"github.com/pojntfx/tapisk/pkg/mtio"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 	}
 	defer f.Close()
 
-	blocksize, err := utils.GetBlocksize(f)
+	blocksize, err := mtio.GetBlocksize(f)
 	if err != nil {
 		panic(err)
 	}
