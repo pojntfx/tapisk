@@ -1,116 +1,76 @@
 package backend
 
 import (
-	"io"
+	"errors"
 	"os"
 	"sync"
-	"syscall"
-	"unsafe"
 
-	"github.com/pojntfx/tapisk/pkg/ioctl"
+	"github.com/pojntfx/tapisk/pkg/index"
+	"github.com/pojntfx/tapisk/pkg/mtio"
+)
+
+var (
+	ErrNotImplemented = errors.New("not implemented")
 )
 
 type TapeBackend struct {
-	drive     *os.File
+	drive *os.File
+	index *index.BboltIndex
+
 	size      int64
 	blocksize uint64
 	lock      sync.Mutex
 }
 
-func NewTapeBackend(drive *os.File, size int64, blocksize uint64) *TapeBackend {
-	return &TapeBackend{drive, size, blocksize, sync.Mutex{}}
-}
+func NewTapeBackend(
+	drive *os.File,
+	index *index.BboltIndex,
 
-func (b *TapeBackend) seekToBlock(block int32) error {
-	mtop := &ioctl.Mtop{}
-	mtop.SetOp(ioctl.MTSEEK)
-	mtop.SetCount(block)
+	size int64,
+	blocksize uint64,
+) *TapeBackend {
+	return &TapeBackend{
+		drive,
+		index,
 
-	if _, _, err := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		b.drive.Fd(),
-		ioctl.MTIOCTOP,
-		uintptr(unsafe.Pointer(mtop)),
-	); err != 0 {
-		return err
+		size,
+		blocksize,
+
+		sync.Mutex{},
 	}
-
-	return nil
-}
-
-func (b *TapeBackend) discardBytes(count int64) error {
-	if _, err := io.CopyN(io.Discard, b.drive, count); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 	b.lock.Lock()
-
-	if err = b.seekToBlock(int32(off / int64(b.blocksize))); err != nil {
-		b.lock.Unlock()
-
-		return -1, err
-	}
-
-	if err := b.discardBytes(off % int64(b.blocksize)); err != nil {
-		b.lock.Unlock()
-
-		return -1, err
-	}
-
-	n, err = b.drive.Read(p)
-
-	b.lock.Unlock()
-
-	return n, err
-}
-
-func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
-	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	startBlock := off / int64(b.blocksize)
 	startOffset := off % int64(b.blocksize)
 	endBlock := (off + int64(len(p))) / int64(b.blocksize)
 	endOffset := (off + int64(len(p))) % int64(b.blocksize)
 
-	c := make([]byte, (endBlock-startBlock)*int64(b.blocksize))
+	out := make([]byte, (endBlock-startBlock)*int64(b.blocksize))
 
-	if err = b.seekToBlock(int32(startBlock)); err != nil {
-		b.lock.Unlock()
-
-		return -1, err
-	}
-
-	_, err = b.drive.Read(c)
-	if err != nil {
-		b.lock.Unlock()
-
-		return -1, err
-	}
-
-	n = copy(c[startOffset:len(c)-int(endOffset)], p)
-
-	if err = b.seekToBlock(int32(startBlock)); err != nil {
-		b.lock.Unlock()
-
-		return -1, err
-	}
-
-	for i := uint64(0); i < uint64((endBlock - startBlock)); i++ {
-		_, err = b.drive.Write(c[i*b.blocksize : (i+1)*b.blocksize])
+	for i := int64(0); i <= endBlock-startBlock; i++ {
+		location, err := b.index.GetLocation(uint64(startBlock + i))
 		if err != nil {
-			b.lock.Unlock()
+			return -1, err
+		}
 
+		if err := mtio.SeekToBlock(b.drive, int32(location)); err != nil {
+			return -1, err
+		}
+
+		if _, err = b.drive.Read(out[i*int64(b.blocksize):]); err != nil {
 			return -1, err
 		}
 	}
 
-	b.lock.Unlock()
+	return copy(p, out[startOffset:len(out)-int(endOffset)]), nil
+}
 
-	return n, err
+func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
+	return -1, ErrNotImplemented
 }
 
 func (b *TapeBackend) Size() (int64, error) {

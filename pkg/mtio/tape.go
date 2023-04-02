@@ -21,3 +21,20 @@ func GetBlocksize(drive *os.File) (uint64, error) {
 
 	return uint64((mtget.Dsreg() & ioctl.MT_ST_BLKSIZE_MASK) >> ioctl.MT_ST_BLKSIZE_SHIFT), nil
 }
+
+func SeekToBlock(drive *os.File, block int32) error {
+	mtop := &ioctl.Mtop{}
+	mtop.SetOp(ioctl.MTSEEK)
+	mtop.SetCount(block)
+
+	if _, _, err := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		drive.Fd(),
+		ioctl.MTIOCTOP,
+		uintptr(unsafe.Pointer(mtop)),
+	); err != 0 {
+		return err
+	}
+
+	return nil
+}
