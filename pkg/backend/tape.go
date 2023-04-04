@@ -57,6 +57,10 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 			return -1, err
 		}
 
+		if errors.Is(err, index.ErrNotExists) {
+			continue
+		}
+
 		if err := mtio.SeekToBlock(b.drive, int32(location)); err != nil {
 			return -1, err
 		}

@@ -3,9 +3,14 @@ package index
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"os"
 
 	"go.etcd.io/bbolt"
+)
+
+var (
+	ErrNotExists = errors.New("location does not exist")
 )
 
 type BboltIndex struct {
@@ -52,6 +57,12 @@ func (b *BboltIndex) GetLocation(block uint64) (location uint64, err error) {
 	binary.BigEndian.PutUint64(key, block)
 
 	return location, b.db.View(func(tx *bbolt.Tx) error {
-		return binary.Read(bytes.NewReader(tx.Bucket([]byte(b.bucket)).Get(key)), binary.BigEndian, &location)
+		value := tx.Bucket([]byte(b.bucket)).Get(key)
+
+		if value == nil {
+			return ErrNotExists
+		}
+
+		return binary.Read(bytes.NewReader(value), binary.BigEndian, &location)
 	})
 }
