@@ -19,7 +19,10 @@ type TapeBackend struct {
 
 	size      int64
 	blocksize uint64
-	lock      sync.Mutex
+
+	seekToBlock func(drive *os.File, block int32) error
+
+	lock sync.Mutex
 }
 
 func NewTapeBackend(
@@ -36,6 +39,8 @@ func NewTapeBackend(
 		size,
 		blocksize,
 
+		mtio.SeekToBlock,
+
 		sync.Mutex{},
 	}
 }
@@ -49,28 +54,37 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 	endBlock := (off + int64(len(p))) / int64(b.blocksize)
 	endOffset := (off + int64(len(p))) % int64(b.blocksize)
 
-	out := make([]byte, (endBlock-startBlock)*int64(b.blocksize))
+	if uint64(len(p)) < b.blocksize && startBlock == endBlock {
+		endOffset = startOffset + int64(len(p))
+	}
+
+	out := make([]byte, (endBlock-startBlock+1)*int64(b.blocksize))
 
 	for i := int64(0); i <= endBlock-startBlock; i++ {
 		location, err := b.index.GetLocation(uint64(startBlock + i))
 		if err != nil {
+			if errors.Is(err, index.ErrNotExists) {
+				continue
+			}
+
 			return -1, err
 		}
 
-		if errors.Is(err, index.ErrNotExists) {
-			continue
-		}
-
-		if err := mtio.SeekToBlock(b.drive, int32(location)); err != nil {
+		if err := b.seekToBlock(b.drive, int32(location)); err != nil {
 			return -1, err
 		}
 
-		if _, err = b.drive.Read(out[i*int64(b.blocksize):]); err != nil {
+		if _, err = b.drive.Read(out[i*int64(b.blocksize) : (i+1)*int64(b.blocksize)]); err != nil {
 			return -1, err
 		}
 	}
 
-	return copy(p, out[startOffset:len(out)-int(endOffset)]), nil
+	upperBound := len(out) - int(endOffset) + int(startOffset)
+	if upperBound > len(out) {
+		upperBound = len(out)
+	}
+
+	return copy(p, out[startOffset:upperBound]), nil
 }
 
 func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {

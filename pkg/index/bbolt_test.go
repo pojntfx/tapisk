@@ -72,16 +72,22 @@ func TestSetAndGetLocation(t *testing.T) {
 				err = index.SetLocation(tc.block, tc.location)
 				if err != nil {
 					t.Errorf("Unexpected error in SetLocation: %v", err)
+
+					return
 				}
 			}
 
 			location, err := index.GetLocation(tc.block)
 			if !errors.Is(err, tc.errExpect) {
 				t.Errorf("Unexpected error in GetLocation: %v", err)
+
+				return
 			}
 
 			if location != tc.location {
 				t.Errorf("Expected location to be %d, got %d", tc.location, location)
+
+				return
 			}
 		})
 	}
