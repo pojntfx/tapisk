@@ -38,3 +38,18 @@ func SeekToBlock(drive *os.File, block int32) error {
 
 	return nil
 }
+
+func Tell(drive *os.File) (uint64, error) {
+	mtpos := &ioctl.Mtpos{}
+
+	if _, _, err := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		drive.Fd(),
+		ioctl.MTIOCPOS,
+		uintptr(unsafe.Pointer(mtpos)),
+	); err != 0 {
+		return 0, err
+	}
+
+	return mtpos.Blkno(), nil
+}
