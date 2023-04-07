@@ -53,3 +53,20 @@ func Tell(drive *os.File) (uint64, error) {
 
 	return mtpos.Blkno(), nil
 }
+
+func SeekToEOD(drive *os.File) error {
+	mtop := &ioctl.Mtop{}
+	mtop.SetOp(ioctl.MTEOM)
+	mtop.SetCount(1)
+
+	if _, _, err := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		drive.Fd(),
+		ioctl.MTIOCTOP,
+		uintptr(unsafe.Pointer(mtop)),
+	); err != 0 {
+		return err
+	}
+
+	return nil
+}

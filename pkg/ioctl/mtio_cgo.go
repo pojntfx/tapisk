@@ -16,6 +16,7 @@ const (
 	MT_ST_BLKSIZE_SHIFT = C.MT_ST_BLKSIZE_SHIFT
 
 	MTSEEK = C.MTSEEK
+	MTEOM  = C.MTEOM
 )
 
 type Mtget C.struct_mtget
