@@ -43,6 +43,7 @@ type TapeBackend struct {
 	blocksize uint64
 
 	seekToBlock func(drive *os.File, block int32) error
+	seekToEOD   func(drive *os.File) error
 	tell        func(drive *os.File) (uint64, error)
 
 	lock sync.Mutex
@@ -63,6 +64,7 @@ func NewTapeBackend(
 		blocksize,
 
 		mtio.SeekToBlock,
+		mtio.SeekToEOD,
 		mtio.Tell,
 
 		sync.Mutex{},
@@ -114,7 +116,9 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 	copy(out[lowerBound:upperBound], p)
 
 	for i := int64(0); i <= endBlock-startBlock; i++ {
-		// TODO: Seek to EOD
+		if err := b.seekToEOD(b.drive); err != nil {
+			return -1, err
+		}
 
 		location, err := b.tell(b.drive)
 		if err != nil {

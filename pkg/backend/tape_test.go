@@ -135,3 +135,56 @@ func TestReadAt(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteAt(t *testing.T) {
+	f, err := ioutil.TempFile("", "tape_backend_test_")
+	if err != nil {
+		t.Fatal("Failed to create temporary file for tape drive:", err)
+	}
+	defer os.Remove(f.Name())
+
+	blockSize := uint64(4096)
+	numBlocks := uint64(3)
+	size := int64(numBlocks) * int64(blockSize)
+
+	indexFile, err := ioutil.TempFile("", "index_test_")
+	if err != nil {
+		t.Fatal("Failed to create temporary file for index:", err)
+	}
+	defer os.Remove(indexFile.Name())
+
+	index := index.NewBboltIndex(indexFile.Name(), "test")
+	if err := index.Open(); err != nil {
+		t.Fatal("Failed to open index:", err)
+	}
+	defer index.Close()
+
+	tb := &TapeBackend{
+		drive:     f,
+		index:     index,
+		size:      size,
+		blocksize: blockSize,
+		seekToBlock: func(drive *os.File, block int32) error {
+			_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
+
+			return err
+		},
+		seekToEOD: func(drive *os.File) error {
+			_, err := drive.Seek(0, io.SeekEnd)
+
+			return err
+		},
+		tell: func(drive *os.File) (uint64, error) {
+			curr, err := drive.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return 0, err
+			}
+
+			return uint64(curr / size), nil
+		},
+	}
+
+	if _, err := tb.WriteAt([]byte("Hello, world!"), 0); err != nil {
+		panic(err)
+	}
+}
