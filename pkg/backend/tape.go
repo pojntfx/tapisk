@@ -75,6 +75,10 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
+	return b.readAt(p, off)
+}
+
+func (b *TapeBackend) readAt(p []byte, off int64) (n int, err error) {
 	startBlock, endBlock, out, lowerBound, upperBound := getBlockBuffer(int64(b.blocksize), int64(len(p)), off)
 
 	for i := int64(0); i <= endBlock-startBlock; i++ {
@@ -105,11 +109,11 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 
 	startBlock, endBlock, out, lowerBound, upperBound := getBlockBuffer(int64(b.blocksize), int64(len(p)), off)
 
-	if _, err := b.ReadAt(out[:lowerBound], off); err != nil {
+	if _, err := b.readAt(out[:lowerBound], off); err != nil {
 		return -1, err
 	}
 
-	if _, err := b.ReadAt(out[upperBound:], off+upperBound); err != nil {
+	if _, err := b.readAt(out[upperBound:], off+upperBound); err != nil {
 		return -1, err
 	}
 
