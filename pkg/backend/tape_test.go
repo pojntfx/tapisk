@@ -5,12 +5,14 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/pojntfx/tapisk/pkg/index"
 )
 
-func TestReadAt(t *testing.T) {
+func TestReadAtTable(t *testing.T) {
+	// Initialize tape
 	f, err := ioutil.TempFile("", "tape_backend_test_")
 	if err != nil {
 		t.Fatal("Failed to create temporary file for tape drive:", err)
@@ -136,6 +138,131 @@ func TestReadAt(t *testing.T) {
 	}
 }
 
+func TestReadAtOverwrites(t *testing.T) {
+	// Initialize tape
+	f, err := ioutil.TempFile("", "tape_backend_test_")
+	if err != nil {
+		t.Fatal("Failed to create temporary file for tape drive:", err)
+	}
+	defer os.Remove(f.Name())
+
+	blockSize := uint64(4096)
+	numBlocks := uint64(3)
+	size := int64(numBlocks) * int64(blockSize)
+
+	for i := uint64(0); i < numBlocks; i++ {
+		data := make([]byte, blockSize)
+		for j := range data {
+			data[j] = byte(i)
+		}
+
+		if _, err := f.Write(data); err != nil {
+			t.Fatal("Failed to write data to tape drive:", err)
+		}
+	}
+
+	indexFile, err := ioutil.TempFile("", "index_test_")
+	if err != nil {
+		t.Fatal("Failed to create temporary file for index:", err)
+	}
+	defer os.Remove(indexFile.Name())
+
+	index := index.NewBboltIndex(indexFile.Name(), "test")
+	if err := index.Open(); err != nil {
+		t.Fatal("Failed to open index:", err)
+	}
+	defer index.Close()
+
+	for i := uint64(0); i < numBlocks; i++ {
+		if err := index.SetLocation(i, i); err != nil {
+			t.Fatal("Failed to set location in index:", err)
+		}
+	}
+
+	// Add overwrites
+	expect := []byte("Overwrite")
+	{
+		// Read second block
+		block := make([]byte, blockSize)
+		if _, err := f.ReadAt(block, int64(blockSize)*2); err != nil {
+			t.Fatal(err)
+		}
+
+		// Change block 2 bytes in
+		copy(block[2:], expect)
+
+		// Seek to end
+		if _, err := f.Seek(0, io.SeekEnd); err != nil {
+			t.Fatal(err)
+		}
+
+		curr, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Add new location to index
+		if err := index.SetLocation(2, uint64(curr)/blockSize); err != nil {
+			t.Fatal(err)
+		}
+
+		// Write back block
+		if _, err := f.Write(block); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tb := &TapeBackend{
+		drive:     f,
+		index:     index,
+		size:      size,
+		blocksize: blockSize,
+		seekToBlock: func(drive *os.File, block int32) error {
+			_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
+
+			return err
+		},
+	}
+
+	// Read back (2nd block + 2 bytes in)
+	{
+		got := make([]byte, len(expect))
+		if _, err := tb.ReadAt(got, (int64(blockSize)*2)+2); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
+	}
+
+	// Read back (2nd block, first two bytes - should contains 2s)
+	{
+		got := make([]byte, 2)
+		if _, err := tb.ReadAt(got, (int64(blockSize) * 2)); err != nil {
+			t.Fatal(err)
+		}
+
+		expect := bytes.Repeat([]byte{2}, 2)
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
+	}
+
+	// Read back (2nd block, after the overwrite - should contains 2s)
+	{
+		got := make([]byte, blockSize-2-uint64(len(expect)))
+		if _, err := tb.ReadAt(got, (int64(blockSize)*2)+2+int64(len(expect))); err != nil {
+			t.Fatal(err)
+		}
+
+		expect := bytes.Repeat([]byte{2}, len(got))
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
+	}
+}
+
 func TestWriteAt(t *testing.T) {
 	f, err := ioutil.TempFile("", "tape_backend_test_")
 	if err != nil {
@@ -184,7 +311,23 @@ func TestWriteAt(t *testing.T) {
 		},
 	}
 
-	if _, err := tb.WriteAt([]byte("Hello, world!"), 0); err != nil {
+	input := []byte("Hello, world!")
+	if _, err := tb.WriteAt(input, 0); err != nil {
 		panic(err)
 	}
+
+	if _, err := tb.WriteAt(input, int64(len(input))); err != nil {
+		panic(err)
+	}
+
+	if _, err := tb.WriteAt([]byte("Overwrite"), 2); err != nil {
+		panic(err)
+	}
+
+	output := make([]byte, len(input)*2)
+	if _, err := tb.ReadAt(output, 0); err != nil {
+		panic(err)
+	}
+
+	// log.Println(string(input), string(output))
 }
