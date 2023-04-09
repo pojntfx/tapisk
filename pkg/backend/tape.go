@@ -9,32 +9,6 @@ import (
 	"github.com/pojntfx/tapisk/pkg/mtio"
 )
 
-func getBlockBuffer(blocksize int64, plength int64, off int64) (
-	startBlock,
-	endBlock int64,
-	out []byte,
-	lowerBound,
-	upperBound int64,
-) {
-	startBlock = off / blocksize
-	lowerBound = off % blocksize
-	endBlock = (off + plength) / blocksize
-	endOffset := (off + plength) % blocksize
-
-	if uint64(plength) < uint64(blocksize) && startBlock == endBlock {
-		endOffset = lowerBound + plength
-	}
-
-	out = make([]byte, (endBlock-startBlock+1)*blocksize)
-
-	upperBound = int64(len(out)) - endOffset + lowerBound
-	if upperBound > int64(len(out)) {
-		upperBound = int64(len(out))
-	}
-
-	return
-}
-
 type TapeBackend struct {
 	drive *os.File
 	index *index.BboltIndex
@@ -79,9 +53,23 @@ func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (b *TapeBackend) readAt(p []byte, off int64) (n int, err error) {
-	startBlock, endBlock, out, lowerBound, upperBound := getBlockBuffer(int64(b.blocksize), int64(len(p)), off)
+	startBlock := uint64(off) / b.blocksize
+	lowerBound := uint64(off) % b.blocksize
+	endBlock := (uint64(off) + uint64(len(p))) / b.blocksize
+	endOffset := (uint64(off) + uint64(len(p))) % b.blocksize
 
-	for i := int64(0); i <= endBlock-startBlock; i++ {
+	if uint64(len(p)) < uint64(b.blocksize) && startBlock == endBlock {
+		endOffset = lowerBound + uint64(len(p))
+	}
+
+	out := make([]byte, (endBlock-startBlock+1)*b.blocksize)
+
+	upperBound := uint64(len(out)) - endOffset + lowerBound
+	if upperBound > uint64(len(out)) {
+		upperBound = uint64(len(out))
+	}
+
+	for i := uint64(0); i <= endBlock-startBlock; i++ {
 		location, err := b.index.GetLocation(uint64(startBlock + i))
 		if err != nil {
 			if errors.Is(err, index.ErrNotExists) {
@@ -95,7 +83,7 @@ func (b *TapeBackend) readAt(p []byte, off int64) (n int, err error) {
 			return -1, err
 		}
 
-		if _, err = b.drive.Read(out[i*int64(b.blocksize) : (i+1)*int64(b.blocksize)]); err != nil {
+		if _, err = b.drive.Read(out[uint64(i)*b.blocksize : (uint64(i)+1)*b.blocksize]); err != nil {
 			return -1, err
 		}
 	}
@@ -107,33 +95,32 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	startBlock, endBlock, out, lowerBound, upperBound := getBlockBuffer(int64(b.blocksize), int64(len(p)), off)
+	startBlock := uint64(off) / b.blocksize
+	lowerBound := uint64(off) % b.blocksize
+	endBlock := (uint64(off) + uint64(len(p))) / b.blocksize
 
-	if _, err := b.readAt(out[:lowerBound], off); err != nil {
+	buf := make([]byte, ((endBlock-startBlock)+1)*b.blocksize)
+	if _, err := b.readAt(buf, int64(startBlock)*int64(b.blocksize)); err != nil {
 		return -1, err
 	}
 
-	if _, err := b.readAt(out[upperBound:], off+upperBound); err != nil {
+	copy(buf[lowerBound:], p)
+
+	if err := b.seekToEOD(b.drive); err != nil {
 		return -1, err
 	}
 
-	copy(out[lowerBound:upperBound], p)
-
-	for i := int64(0); i <= endBlock-startBlock; i++ {
-		if err := b.seekToEOD(b.drive); err != nil {
-			return -1, err
-		}
-
-		location, err := b.tell(b.drive)
+	for i := uint64(0); i <= endBlock-startBlock; i++ {
+		curr, err := b.tell(b.drive)
 		if err != nil {
 			return -1, err
 		}
 
-		if err := b.index.SetLocation(uint64(startBlock+i), location); err != nil {
+		if err := b.index.SetLocation(startBlock+i, curr); err != nil {
 			return -1, err
 		}
 
-		if _, err = b.drive.Write(out[i*int64(b.blocksize) : (i+1)*int64(b.blocksize)]); err != nil {
+		if _, err := b.drive.Write(buf[i*b.blocksize : (i+1)*b.blocksize]); err != nil {
 			return -1, err
 		}
 	}

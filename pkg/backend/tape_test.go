@@ -264,6 +264,7 @@ func TestReadAtOverwrites(t *testing.T) {
 }
 
 func TestWriteAt(t *testing.T) {
+	// Initialize tape
 	f, err := ioutil.TempFile("", "tape_backend_test_")
 	if err != nil {
 		t.Fatal("Failed to create temporary file for tape drive:", err)
@@ -311,23 +312,20 @@ func TestWriteAt(t *testing.T) {
 		},
 	}
 
-	input := []byte("Hello, world!")
-	if _, err := tb.WriteAt(input, 0); err != nil {
-		panic(err)
-	}
+	// Write initial contents
+	{
+		expect := []byte("Hello, world!")
+		if _, err := tb.WriteAt(expect, 0); err != nil {
+			t.Fatal(err)
+		}
 
-	if _, err := tb.WriteAt(input, int64(len(input))); err != nil {
-		panic(err)
-	}
+		got := make([]byte, len(expect))
+		if _, err := tb.ReadAt(got, 0); err != nil {
+			t.Fatal(err)
+		}
 
-	if _, err := tb.WriteAt([]byte("Overwrite"), 2); err != nil {
-		panic(err)
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
 	}
-
-	output := make([]byte, len(input)*2)
-	if _, err := tb.ReadAt(output, 0); err != nil {
-		panic(err)
-	}
-
-	// log.Println(string(input), string(output))
 }
