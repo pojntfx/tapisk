@@ -308,11 +308,11 @@ func TestWriteAt(t *testing.T) {
 				return 0, err
 			}
 
-			return uint64(curr / size), nil
+			return uint64(curr / int64(blockSize)), nil
 		},
 	}
 
-	// Write initial contents
+	// Write and read initial contents
 	{
 		expect := []byte("Hello, world!")
 		if _, err := tb.WriteAt(expect, 0); err != nil {
@@ -321,6 +321,51 @@ func TestWriteAt(t *testing.T) {
 
 		got := make([]byte, len(expect))
 		if _, err := tb.ReadAt(got, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
+	}
+
+	// Overwrite and read part of it 2 bytes in
+	{
+		expect := []byte("ovrw")
+		if _, err := tb.WriteAt(expect, 2); err != nil {
+			t.Fatal(err)
+		}
+
+		got := make([]byte, len(expect))
+		if _, err := tb.ReadAt(got, 2); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
+	}
+
+	// Read back part from before the overwrite
+	{
+		expect := []byte("He")
+
+		got := make([]byte, len(expect))
+		if _, err := tb.ReadAt(got, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(got, expect) {
+			t.Errorf("ReadAt = %v, want %v", got, expect)
+		}
+	}
+
+	// Read back part from after the overwrite
+	{
+		expect := []byte(" world!")
+
+		got := make([]byte, len(expect))
+		if _, err := tb.ReadAt(got, 6); err != nil {
 			t.Fatal(err)
 		}
 
