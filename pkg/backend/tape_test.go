@@ -2,6 +2,7 @@ package backend
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -224,42 +225,64 @@ func TestReadAtOverwrites(t *testing.T) {
 		},
 	}
 
-	// Read back (2nd block + 2 bytes in)
-	{
-		got := make([]byte, len(expect))
-		if _, err := tb.ReadAt(got, (int64(blockSize)*2)+2); err != nil {
-			t.Fatal(err)
-		}
+	testCases := []struct {
+		name string
+		run  func(tb *TapeBackend, t *testing.T) error
+	}{
+		{
+			name: "Read and write less than a block",
+			run: func(tb *TapeBackend, t *testing.T) error {
+				// Read back (2nd block + 2 bytes in)
+				{
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, (int64(blockSize)*2)+2); err != nil {
+						return err
+					}
 
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Read back (2nd block, first two bytes - should contains 2s)
+				{
+					got := make([]byte, 2)
+					if _, err := tb.ReadAt(got, (int64(blockSize) * 2)); err != nil {
+						return err
+					}
+
+					expect := bytes.Repeat([]byte{2}, 2)
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Read back (2nd block, after the overwrite - should contains 2s)
+				{
+					got := make([]byte, blockSize-2-uint64(len(expect)))
+					if _, err := tb.ReadAt(got, (int64(blockSize)*2)+2+int64(len(expect))); err != nil {
+						return err
+					}
+
+					expect := bytes.Repeat([]byte{2}, len(got))
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				return nil
+			},
+		},
 	}
 
-	// Read back (2nd block, first two bytes - should contains 2s)
-	{
-		got := make([]byte, 2)
-		if _, err := tb.ReadAt(got, (int64(blockSize) * 2)); err != nil {
-			t.Fatal(err)
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.run(tb, t); err != nil {
+				t.Errorf("Unexpected error: %v", err)
 
-		expect := bytes.Repeat([]byte{2}, 2)
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
-	}
-
-	// Read back (2nd block, after the overwrite - should contains 2s)
-	{
-		got := make([]byte, blockSize-2-uint64(len(expect)))
-		if _, err := tb.ReadAt(got, (int64(blockSize)*2)+2+int64(len(expect))); err != nil {
-			t.Fatal(err)
-		}
-
-		expect := bytes.Repeat([]byte{2}, len(got))
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
+				return
+			}
+		})
 	}
 }
 
@@ -312,65 +335,167 @@ func TestWriteAt(t *testing.T) {
 		},
 	}
 
-	// Write and read initial contents
-	{
-		expect := []byte("Hello, world!")
-		if _, err := tb.WriteAt(expect, 0); err != nil {
-			t.Fatal(err)
-		}
+	testCases := []struct {
+		name string
+		run  func(tb *TapeBackend, t *testing.T) error
+	}{
+		{
+			name: "Read and write less than a block",
+			run: func(tb *TapeBackend, t *testing.T) error {
+				// Write and read initial contents
+				{
+					expect := []byte("Hello, world!")
+					if _, err := tb.WriteAt(expect, 0); err != nil {
+						return err
+					}
 
-		got := make([]byte, len(expect))
-		if _, err := tb.ReadAt(got, 0); err != nil {
-			t.Fatal(err)
-		}
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 0); err != nil {
+						return err
+					}
 
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Overwrite and read part of it 2 bytes in
+				{
+					expect := []byte("ovrw")
+					if _, err := tb.WriteAt(expect, 2); err != nil {
+						return err
+					}
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 2); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Read back part from before the overwrite
+				{
+					expect := []byte("He")
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 0); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Read back part from after the overwrite
+				{
+					expect := []byte(" world!")
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 6); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "Read and write one block",
+			run: func(tb *TapeBackend, t *testing.T) error {
+				// Write and read exactly one block
+				{
+					expect := bytes.Repeat([]byte{5}, int(blockSize))
+					if _, err := tb.WriteAt(expect, 0); err != nil {
+						return err
+					}
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 0); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Write and read exactly one block 5 bytes in
+				{
+					expect := bytes.Repeat([]byte{5}, int(blockSize))
+					if _, err := tb.WriteAt(expect, 5); err != nil {
+						return err
+					}
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 5); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "Read and write more than one block",
+			run: func(tb *TapeBackend, t *testing.T) error {
+				// Write and read more than one block
+				{
+					expect := append(bytes.Repeat([]byte{5}, int(blockSize)), bytes.Repeat([]byte{6}, int(blockSize))...)
+					if _, err := tb.WriteAt(expect, 0); err != nil {
+						return err
+					}
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 0); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				// Write and read more than one block 5 bytes in
+				{
+					expect := append(bytes.Repeat([]byte{5}, int(blockSize)), bytes.Repeat([]byte{6}, int(blockSize))...)
+					if _, err := tb.WriteAt(expect, 5); err != nil {
+						return err
+					}
+
+					got := make([]byte, len(expect))
+					if _, err := tb.ReadAt(got, 5); err != nil {
+						return err
+					}
+
+					if !reflect.DeepEqual(got, expect) {
+						return fmt.Errorf("ReadAt = %v, want %v", got, expect)
+					}
+				}
+
+				return nil
+			},
+		},
 	}
 
-	// Overwrite and read part of it 2 bytes in
-	{
-		expect := []byte("ovrw")
-		if _, err := tb.WriteAt(expect, 2); err != nil {
-			t.Fatal(err)
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.run(tb, t); err != nil {
+				t.Errorf("Unexpected error: %v", err)
 
-		got := make([]byte, len(expect))
-		if _, err := tb.ReadAt(got, 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
-	}
-
-	// Read back part from before the overwrite
-	{
-		expect := []byte("He")
-
-		got := make([]byte, len(expect))
-		if _, err := tb.ReadAt(got, 0); err != nil {
-			t.Fatal(err)
-		}
-
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
-	}
-
-	// Read back part from after the overwrite
-	{
-		expect := []byte(" world!")
-
-		got := make([]byte, len(expect))
-		if _, err := tb.ReadAt(got, 6); err != nil {
-			t.Fatal(err)
-		}
-
-		if !reflect.DeepEqual(got, expect) {
-			t.Errorf("ReadAt = %v, want %v", got, expect)
-		}
+				return
+			}
+		})
 	}
 }
