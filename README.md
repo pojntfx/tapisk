@@ -1,5 +1,7 @@
 # tapisk
 
+![Logo](./docs/logo-readme.png)
+
 Expose a tape drive as a block device.
 
 ## Overview
