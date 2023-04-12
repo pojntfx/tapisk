@@ -65,9 +65,35 @@ mt -f /dev/nst4 status
 mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --cache /tmp/tapisk.db
 
 go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest
+
 sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/nbd0
 
 sudo mkfs.ext4 /dev/nbd0
 
-sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd0 ~/Downloads/mnt && sudo cat ~/Downloads/mnt/test; echo "Current date: $(date)" | sudo tee ~/Downloads/mnt/test && sudo cat ~/Downloads/mnt/test && sudo sync -f ~/Downloads/mnt/test
+sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown ${USER} -R ~/Downloads/mnt && cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test && sync -f ~/Downloads/mnt/test
+```
+
+## Using a Separate Journal Device
+
+```shell
+go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-server-file@latest
+go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest
+
+rm -f /tmp/disk.img && truncate -s 10G /tmp/disk.img && go-nbd-example-server-file --file /tmp/disk.img
+
+sudo $(which go-nbd-example-client) --file /dev/nbd0
+
+mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --cache /tmp/tapisk.db --laddr ':10810'
+
+sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --raddr 'localhost:10810' --file /dev/nbd1
+
+sudo mke2fs -O journal_dev /dev/nbd0
+
+sudo mkfs.ext4 -J device=/dev/nbd0 /dev/nbd1
+
+sudo tune2fs -l /dev/nbd1 | grep -i journal
+
+sudo blkid | grep 'f19ccdb6-b828-4fe9-a65f-ec2910e56b95'
+
+sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown ${USER} -R ~/Downloads/mnt && cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test && sync -f ~/Downloads/mnt/test
 ```
