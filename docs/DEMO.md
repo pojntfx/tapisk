@@ -55,6 +55,8 @@ mt -f /dev/nst6 rewind
 ## Local Development
 
 ```shell
+go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest
+
 lsscsi -g # Find the tape library you want to use (here: `/dev/sg2`)
 
 mtx -f /dev/sg2 status
@@ -64,13 +66,11 @@ mt -f /dev/nst4 status
 
 mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --cache /tmp/tapisk.db
 
-go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest
-
 sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/nbd0
 
 sudo mkfs.ext4 /dev/nbd0
 
-sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown ${USER} -R ~/Downloads/mnt && cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test && sync -f ~/Downloads/mnt/test
+sync -f ~/Downloads/mnt/; sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd0 ~/Downloads/mnt && sudo chown ${USER} -R ~/Downloads/mnt && cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test
 ```
 
 ## Using a Separate Journal Device
@@ -95,5 +95,5 @@ sudo tune2fs -l /dev/nbd1 | grep -i journal
 
 sudo blkid | grep 'f19ccdb6-b828-4fe9-a65f-ec2910e56b95'
 
-sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown ${USER} -R ~/Downloads/mnt && cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test && sync -f ~/Downloads/mnt/test
+sync -f ~/Downloads/mnt; sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown ${USER} -R ~/Downloads/mnt && cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test && sync -f ~/Downloads/mnt
 ```
