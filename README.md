@@ -27,10 +27,11 @@ $ mt -f /dev/nst3 setblk 512 # Set the block size
 $ mt -f /dev/nst3 rewind
 $ mt -f /dev/nst3 erase # Erase the tape
 
-$ rm -f /tmp/tapisk.db && go run . --dev /dev/nst3 --cache /tmp/tapisk.db # Start the NBD server
+$ rm -f /tmp/tapisk.db && go run ./cmd/tapisk --dev /dev/nst3 --cache /tmp/tapisk.db # Start the NBD server
 
 # In another terminal
-$ sudo umount ~/Downloads/mnt; go build -o /tmp/go-nbd-example-client ./cmd/go-nbd-example-client/ && sudo /tmp/go-nbd-example-client --file /dev/nbd1 # Start the NBD client
+$ go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest
+$ sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/nbd1 # Start the NBD client (make sure you have the `nbd` module loaded)
 
 # In another terminal
 $ sudo mkfs.ext4 /dev/nbd1 # Format the tape
