@@ -21,6 +21,18 @@ jobs:
             flags: ""
             cmd: go test ./...
             dst: out/*
+          - id: go
+            src: .
+            os: golang:bullseye
+            flags: ""
+            cmd: ./Hydrunfile go tapisk
+            dst: out/*
+          - id: gccgo
+            src: .
+            os: ghcr.io/pojntfx/bagccgop-base-sid
+            flags: ""
+            cmd: ./Hydrunfile gccgo tapisk
+            dst: out/*
 
     steps:
       - name: Maximize build space
