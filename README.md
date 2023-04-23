@@ -29,7 +29,7 @@ $ mt -f /dev/nst3 erase # Erase the tape
 
 $ rm -f /tmp/tapisk.db && go run ./cmd/tapisk --dev /dev/nst3 --cache /tmp/tapisk.db # Start the NBD server
 
-# In another terminal
+# In another terminal (you can also use the `nbd-client` command from your distribution)
 $ go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest
 $ sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/nbd1 # Start the NBD client (make sure you have the `nbd` module loaded)
 
