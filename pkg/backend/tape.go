@@ -24,6 +24,8 @@ type TapeBackend struct {
 	lock sync.Mutex
 
 	verbose bool
+
+	lastOpWasRead bool
 }
 
 func NewTapeBackend(
@@ -49,6 +51,8 @@ func NewTapeBackend(
 		sync.Mutex{},
 
 		verbose,
+
+		true,
 	}
 }
 
@@ -72,6 +76,8 @@ func (b *TapeBackend) readAt(p []byte, off int64) (n int, err error) {
 	if b.verbose {
 		log.Printf("readAt() len(p)=%v off=%v startBlock=%v endBlock=%v", len(p), off, startBlock, endBlock)
 	}
+
+	b.lastOpWasRead = true
 
 	if uint64(len(p)) < uint64(b.blocksize) && startBlock == endBlock {
 		endOffset = lowerBound + uint64(len(p))
@@ -137,8 +143,12 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 		}
 	}
 
-	if err := b.seekToEOD(b.drive); err != nil {
-		return -1, err
+	if b.lastOpWasRead {
+		if err := b.seekToEOD(b.drive); err != nil {
+			return -1, err
+		}
+
+		b.lastOpWasRead = false
 	}
 
 	numBlocksToWrite := uint64(len(p)) / b.blocksize
