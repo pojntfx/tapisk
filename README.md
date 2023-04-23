@@ -31,7 +31,7 @@ $ mt -f /dev/nst3 rewind
 $ mt -f /dev/nst3 weof # Erase the tape
 $ mt -f /dev/nst3 rewind
 
-$ rm -f /tmp/tapisk.db && go run ./cmd/tapisk --dev /dev/nst3 --cache /tmp/tapisk.db # Start the NBD server
+$ rm -f /tmp/tapisk.db && go run ./cmd/tapisk --dev /dev/nst3 --index /tmp/tapisk.db # Start the NBD server
 
 # In another terminal (you can also use the `nbd-client` command from your distribution)
 $ go install github.com/pojntfx/go-nbd/cmd/go-nbd-example-client@latest

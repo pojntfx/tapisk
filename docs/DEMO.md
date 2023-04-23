@@ -64,7 +64,7 @@ mtx -f /dev/sg2 load 1 # Loads tape drive (here: `/dev/nst4`)
 mt -f /dev/nst4 setblk 512
 mt -f /dev/nst4 status
 
-mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --cache /tmp/tapisk.db
+mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --index /tmp/tapisk.db
 
 sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/nbd0
 
@@ -83,7 +83,7 @@ rm -f /tmp/disk.img && truncate -s 10G /tmp/disk.img && go-nbd-example-server-fi
 
 sudo $(which go-nbd-example-client) --file /dev/nbd0
 
-mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --cache /tmp/tapisk.db --laddr ':10810'
+mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --index /tmp/tapisk.db --laddr ':10810'
 
 sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --raddr 'localhost:10810' --file /dev/nbd1
 

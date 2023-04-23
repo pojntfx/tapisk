@@ -16,7 +16,7 @@ import (
 
 const (
 	devFlag         = "dev"
-	cacheFlag       = "cache"
+	indexFlag       = "index"
 	bucketFlag      = "bucket"
 	sizeFlag        = "size"
 	laddrFlag       = "laddr"
@@ -72,7 +72,7 @@ https://github.com/pojntfx/tapisk`,
 			return err
 		}
 
-		i := index.NewBboltIndex(viper.GetString(cacheFlag), viper.GetString(bucketFlag))
+		i := index.NewBboltIndex(viper.GetString(indexFlag), viper.GetString(bucketFlag))
 
 		if err := i.Open(); err != nil {
 			return err
@@ -145,8 +145,8 @@ https://github.com/pojntfx/tapisk`,
 
 func main() {
 	rootCmd.PersistentFlags().String(devFlag, "/dev/nst6", "Path to device file to connect to")
-	rootCmd.PersistentFlags().String(cacheFlag, "tapisk.db", "Path to cache file to use")
-	rootCmd.PersistentFlags().String(bucketFlag, "tapsik", "Bucket in cache file to use")
+	rootCmd.PersistentFlags().String(indexFlag, "tapisk.db", "Path to index file to use")
+	rootCmd.PersistentFlags().String(bucketFlag, "tapsik", "Bucket in index file to use")
 	rootCmd.PersistentFlags().Int64(sizeFlag, 500*1024*1024, "Size of the tape to expose (native size, not compressed size)")
 	rootCmd.PersistentFlags().String(laddrFlag, ":10809", "Listen address")
 	rootCmd.PersistentFlags().String(networkFlag, "tcp", "Listen network (e.g. `tcp` or `unix`)")
