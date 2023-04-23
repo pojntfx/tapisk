@@ -30,7 +30,7 @@ jobs:
           - id: gccgo
             src: .
             os: ghcr.io/pojntfx/bagccgop-base-sid
-            flags: ""
+            flags: -e '--privileged'
             cmd: ./Hydrunfile gccgo tapisk
             dst: out/*
 
