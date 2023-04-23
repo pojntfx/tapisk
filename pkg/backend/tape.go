@@ -2,6 +2,7 @@ package backend
 
 import (
 	"errors"
+	"log"
 	"os"
 	"sync"
 
@@ -21,6 +22,8 @@ type TapeBackend struct {
 	tell        func(drive *os.File) (uint64, error)
 
 	lock sync.Mutex
+
+	verbose bool
 }
 
 func NewTapeBackend(
@@ -29,6 +32,8 @@ func NewTapeBackend(
 
 	size int64,
 	blocksize uint64,
+
+	verbose bool,
 ) *TapeBackend {
 	return &TapeBackend{
 		drive,
@@ -42,12 +47,18 @@ func NewTapeBackend(
 		mtio.Tell,
 
 		sync.Mutex{},
+
+		verbose,
 	}
 }
 
 func (b *TapeBackend) ReadAt(p []byte, off int64) (n int, err error) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
+
+	if b.verbose {
+		log.Printf("ReadAt() len(p)=%v off=%v", len(p), off)
+	}
 
 	return b.readAt(p, off)
 }
@@ -57,6 +68,10 @@ func (b *TapeBackend) readAt(p []byte, off int64) (n int, err error) {
 	lowerBound := uint64(off) % b.blocksize
 	endBlock := (uint64(off) + uint64(len(p))) / b.blocksize
 	endOffset := (uint64(off) + uint64(len(p))) % b.blocksize
+
+	if b.verbose {
+		log.Printf("readAt() len(p)=%v off=%v startBlock=%v endBlock=%v", len(p), off, startBlock, endBlock)
+	}
 
 	if uint64(len(p)) < uint64(b.blocksize) && startBlock == endBlock {
 		endOffset = lowerBound + uint64(len(p))
@@ -100,6 +115,10 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 	endBlock := (uint64(off) + uint64(len(p))) / b.blocksize
 	upperBound := (uint64(off) + uint64(len(p))) % b.blocksize
 
+	if b.verbose {
+		log.Printf("WriteAt() len(p)=%v off=%v startBlock=%v endBlock=%v", len(p), off, startBlock, endBlock)
+	}
+
 	needsUpdating := lowerBound != 0 || (upperBound != 0 && upperBound != b.blocksize)
 
 	var buf []byte
@@ -142,10 +161,18 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 func (b *TapeBackend) Size() (int64, error) {
+	if b.verbose {
+		log.Println("Size()")
+	}
+
 	return b.size, nil
 }
 
 func (b *TapeBackend) Sync() error {
+	if b.verbose {
+		log.Println("Sync()")
+	}
+
 	// nop, tapes are unbuffered
 	return nil
 }

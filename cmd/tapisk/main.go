@@ -24,6 +24,7 @@ const (
 	nameFlag        = "name"
 	descriptionFlag = "description"
 	readOnlyFlag    = "read-only"
+	verboseFlag     = "verbose"
 )
 
 var rootCmd = &cobra.Command{
@@ -78,7 +79,7 @@ https://github.com/pojntfx/tapisk`,
 		}
 		defer i.Close()
 
-		b := backend.NewTapeBackend(f, i, viper.GetInt64(sizeFlag), blocksize)
+		b := backend.NewTapeBackend(f, i, viper.GetInt64(sizeFlag), blocksize, viper.GetBool(verboseFlag))
 
 		errs := make(chan error)
 
@@ -152,6 +153,7 @@ func main() {
 	rootCmd.PersistentFlags().String(nameFlag, "default", "Export name")
 	rootCmd.PersistentFlags().String(descriptionFlag, "The default export", "Export description")
 	rootCmd.PersistentFlags().Bool(readOnlyFlag, false, "Whether the export should be read-only")
+	rootCmd.PersistentFlags().Bool(verboseFlag, false, "Whether to enable verbose logging")
 
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		panic(err)

@@ -20,12 +20,16 @@ $ cd tapisk
 
 # If you have a tape library
 $ lsscsi -g # Find your tape library (`/dev/sgX`)
+$ mtx -f /dev/sg4 status
 $ mtx -f /dev/sg4 load 1 # Load a tape into your drive
 
 $ lsscsi -g # Find your tape drive (`/dev/nstX`)
+$ mt -f /dev/nst3 status
+$ sudo mt -f /dev/nst3 stsetoptions scsi2logical # Enable the `tell` syscall on your tape drive
 $ mt -f /dev/nst3 setblk 4096 # Set the block size
 $ mt -f /dev/nst3 rewind
-$ mt -f /dev/nst3 erase # Erase the tape
+$ mt -f /dev/nst3 weof # Erase the tape
+$ mt -f /dev/nst3 rewind
 
 $ rm -f /tmp/tapisk.db && go run ./cmd/tapisk --dev /dev/nst3 --cache /tmp/tapisk.db # Start the NBD server
 
