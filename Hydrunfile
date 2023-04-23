@@ -42,7 +42,7 @@ fi
 if [ "$1" = "gccgo" ]; then
     # Install native dependencies
     apt update
-    apt install -y curl
+    apt install -y curl git
 
     # Configure Git
     git config --global --add safe.directory '*'
