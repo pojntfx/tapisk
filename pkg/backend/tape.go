@@ -98,19 +98,32 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 	startBlock := uint64(off) / b.blocksize
 	lowerBound := uint64(off) % b.blocksize
 	endBlock := (uint64(off) + uint64(len(p))) / b.blocksize
+	upperBound := (uint64(off) + uint64(len(p))) % b.blocksize
 
-	buf := make([]byte, ((endBlock-startBlock)+1)*b.blocksize)
-	if _, err := b.readAt(buf, int64(startBlock)*int64(b.blocksize)); err != nil {
-		return -1, err
+	needsUpdating := lowerBound != 0 || (upperBound != 0 && upperBound != b.blocksize)
+
+	var buf []byte
+	if needsUpdating {
+		buf = make([]byte, ((endBlock-startBlock)+1)*b.blocksize)
+		if _, err := b.readAt(buf, int64(startBlock)*int64(b.blocksize)); err != nil {
+			return -1, err
+		}
+		copy(buf[lowerBound:], p)
+		p = buf
+	} else {
+		if uint64(len(p))%b.blocksize != 0 {
+			buf = make([]byte, ((endBlock - startBlock + 1) * b.blocksize))
+			copy(buf, p)
+			p = buf
+		}
 	}
-
-	copy(buf[lowerBound:], p)
 
 	if err := b.seekToEOD(b.drive); err != nil {
 		return -1, err
 	}
 
-	for i := uint64(0); i <= endBlock-startBlock; i++ {
+	numBlocksToWrite := uint64(len(p)) / b.blocksize
+	for i := uint64(0); i < numBlocksToWrite; i++ {
 		curr, err := b.tell(b.drive)
 		if err != nil {
 			return -1, err
@@ -120,7 +133,7 @@ func (b *TapeBackend) WriteAt(p []byte, off int64) (n int, err error) {
 			return -1, err
 		}
 
-		if _, err := b.drive.Write(buf[i*b.blocksize : (i+1)*b.blocksize]); err != nil {
+		if _, err := b.drive.Write(p[i*b.blocksize : (i+1)*b.blocksize]); err != nil {
 			return -1, err
 		}
 	}

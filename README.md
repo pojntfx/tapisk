@@ -23,7 +23,7 @@ $ lsscsi -g # Find your tape library (`/dev/sgX`)
 $ mtx -f /dev/sg4 load 1 # Load a tape into your drive
 
 $ lsscsi -g # Find your tape drive (`/dev/nstX`)
-$ mt -f /dev/nst3 setblk 512 # Set the block size
+$ mt -f /dev/nst3 setblk 4096 # Set the block size
 $ mt -f /dev/nst3 rewind
 $ mt -f /dev/nst3 erase # Erase the tape
 
