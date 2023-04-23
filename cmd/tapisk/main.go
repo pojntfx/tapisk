@@ -133,7 +133,9 @@ https://github.com/pojntfx/tapisk`,
 		}()
 
 		for range errs {
-			return err
+			if err != nil {
+				return err
+			}
 		}
 
 		return nil

@@ -20,7 +20,7 @@ $ cd tapisk
 
 # If you have a tape library
 $ lsscsi -g # Find your tape library (`/dev/sgX`)
-$ mtx -f /dev/sg1 load 1 # Load a tape into your drive
+$ mtx -f /dev/sg4 load 1 # Load a tape into your drive
 
 $ lsscsi -g # Find your tape drive (`/dev/nstX`)
 $ mt -f /dev/nst3 setblk 512 # Set the block size
@@ -35,7 +35,7 @@ $ sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/n
 
 # In another terminal
 $ sudo mkfs.ext4 /dev/nbd1 # Format the tape
-$ sudo sync -f ~/Downloads/mnt/test; sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown -R "${USER}" ~/Downloads/mnt # Mount the tape to ~/Downloads/mnt
+$ sudo time sync -f ~/Downloads/mnt; sudo umount ~/Downloads/mnt; sudo rm -rf ~/Downloads/mnt && sudo mkdir -p ~/Downloads/mnt && sudo mount /dev/nbd1 ~/Downloads/mnt && sudo chown -R "${USER}" ~/Downloads/mnt # Mount the tape to ~/Downloads/mnt
 
 $ cat ~/Downloads/mnt/test; echo "Current date: $(date)" | tee ~/Downloads/mnt/test && cat ~/Downloads/mnt/test; sync -f ~/Downloads/mnt/test # Test the filesystem by reading & writing the current date to a file
 ```
