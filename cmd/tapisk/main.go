@@ -1,167 +1,98 @@
 package main
 
 import (
+	"flag"
 	"log"
-	"net"
 	"os"
-	"strings"
 
 	"github.com/pojntfx/go-nbd/pkg/server"
+	"github.com/pojntfx/r3map/pkg/device"
 	"github.com/pojntfx/tapisk/pkg/backend"
-	"github.com/pojntfx/tapisk/pkg/index"
+	idx "github.com/pojntfx/tapisk/pkg/index"
 	"github.com/pojntfx/tapisk/pkg/mtio"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
-
-const (
-	devFlag         = "dev"
-	indexFlag       = "index"
-	bucketFlag      = "bucket"
-	sizeFlag        = "size"
-	laddrFlag       = "laddr"
-	networkFlag     = "network"
-	nameFlag        = "name"
-	descriptionFlag = "description"
-	readOnlyFlag    = "read-only"
-	verboseFlag     = "verbose"
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "tapisk",
-	Short: "Expose a tape drive as a block device",
-	Long: `Expose a tape drive as a block device.
-
-Find more information at:
-https://github.com/pojntfx/tapisk`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		viper.SetEnvPrefix("tapisk")
-		viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
-
-		if err := viper.BindPFlags(cmd.PersistentFlags()); err != nil {
-			return err
-		}
-
-		return nil
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		l, err := net.Listen(viper.GetString(networkFlag), viper.GetString(laddrFlag))
-		if err != nil {
-			return err
-		}
-		defer l.Close()
-
-		log.Println("Listening on", l.Addr())
-
-		var f *os.File
-		if viper.GetBool(readOnlyFlag) {
-			f, err = os.OpenFile(viper.GetString(devFlag), os.O_RDONLY, os.ModeCharDevice)
-			if err != nil {
-				return err
-			}
-		} else {
-			f, err = os.OpenFile(viper.GetString(devFlag), os.O_RDWR, os.ModeCharDevice)
-			if err != nil {
-				return err
-			}
-		}
-		defer f.Close()
-
-		blocksize, err := mtio.GetBlocksize(f)
-		if err != nil {
-			return err
-		}
-
-		i := index.NewBboltIndex(viper.GetString(indexFlag), viper.GetString(bucketFlag))
-
-		if err := i.Open(); err != nil {
-			return err
-		}
-		defer i.Close()
-
-		b := backend.NewTapeBackend(f, i, viper.GetInt64(sizeFlag), blocksize, viper.GetBool(verboseFlag))
-
-		errs := make(chan error)
-
-		go func() {
-			clients := 0
-			for {
-				conn, err := l.Accept()
-				if err != nil {
-					log.Println("Could not accept connection, continuing:", err)
-
-					continue
-				}
-
-				clients++
-
-				log.Printf("%v clients connected", clients)
-
-				go func() {
-					defer func() {
-						_ = conn.Close()
-
-						clients--
-
-						if err := recover(); err != nil {
-							log.Printf("Client disconnected with error: %v", err)
-						}
-
-						log.Printf("%v clients connected", clients)
-					}()
-
-					if err := server.Handle(
-						conn,
-						[]server.Export{
-							{
-								Name:        viper.GetString(nameFlag),
-								Description: viper.GetString(descriptionFlag),
-								Backend:     b,
-							},
-						},
-						&server.Options{
-							ReadOnly:           viper.GetBool(readOnlyFlag),
-							MinimumBlockSize:   uint32(blocksize),
-							PreferredBlockSize: uint32(blocksize),
-							MaximumBlockSize:   uint32(blocksize),
-						}); err != nil {
-						errs <- err
-
-						return
-					}
-				}()
-			}
-		}()
-
-		for range errs {
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
-	},
-}
 
 func main() {
-	rootCmd.PersistentFlags().String(devFlag, "/dev/nst6", "Path to device file to connect to")
-	rootCmd.PersistentFlags().String(indexFlag, "tapisk.db", "Path to index file to use")
-	rootCmd.PersistentFlags().String(bucketFlag, "tapsik", "Bucket in index file to use")
-	rootCmd.PersistentFlags().Int64(sizeFlag, 500*1024*1024, "Size of the tape to expose (native size, not compressed size)")
-	rootCmd.PersistentFlags().String(laddrFlag, ":10809", "Listen address")
-	rootCmd.PersistentFlags().String(networkFlag, "tcp", "Listen network (e.g. `tcp` or `unix`)")
-	rootCmd.PersistentFlags().String(nameFlag, "default", "Export name")
-	rootCmd.PersistentFlags().String(descriptionFlag, "The default export", "Export description")
-	rootCmd.PersistentFlags().Bool(readOnlyFlag, false, "Whether the export should be read-only")
-	rootCmd.PersistentFlags().Bool(verboseFlag, false, "Whether to enable verbose logging")
+	drivePath := flag.String("drive", "/dev/nst0", "Path to tape drive file to connect to")
+	index := flag.String("index", "tapisk.db", "Path to index file to use")
+	bucket := flag.String("bucket", "tapsik", "Bucket in index file to use")
+	size := flag.Int64("size", 500*1024*1024, "Size of the tape (native size, not compressed size)")
+	devPath := flag.String("device", "/dev/nbd0", "Path to NBD device file to use")
+	readOnly := flag.Bool("read-only", false, "Whether the device should be read-only")
+	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
-	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
+	flag.Parse()
+
+	var (
+		driveFile *os.File
+		err       error
+	)
+	if *readOnly {
+		driveFile, err = os.OpenFile(*drivePath, os.O_RDONLY, os.ModeCharDevice)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		driveFile, err = os.OpenFile(*drivePath, os.O_RDWR, os.ModeCharDevice)
+		if err != nil {
+			panic(err)
+		}
+	}
+	defer driveFile.Close()
+
+	blocksize, err := mtio.GetBlocksize(driveFile)
+	if err != nil {
 		panic(err)
 	}
 
-	viper.AutomaticEnv()
+	i := idx.NewBboltIndex(*index, *bucket)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := i.Open(); err != nil {
 		panic(err)
+	}
+	defer i.Close()
+
+	b := backend.NewTapeBackend(driveFile, i, *size, blocksize, *verbose)
+
+	devFile, err := os.Open(*devPath)
+	if err != nil {
+		panic(err)
+	}
+	defer devFile.Close()
+
+	dev := device.NewDevice(
+		b,
+		devFile,
+
+		&server.Options{
+			ReadOnly:           *readOnly,
+			MinimumBlockSize:   uint32(blocksize),
+			PreferredBlockSize: uint32(blocksize),
+			MaximumBlockSize:   uint32(blocksize),
+		},
+		nil,
+	)
+
+	errs := make(chan error)
+
+	go func() {
+		if err := dev.Wait(); err != nil {
+			errs <- err
+
+			return
+		}
+	}()
+
+	defer dev.Close()
+	if err := dev.Open(); err != nil {
+		panic(err)
+	}
+
+	log.Println("Ready on", *devPath)
+
+	for range errs {
+		if err != nil {
+			panic(err)
+		}
 	}
 }

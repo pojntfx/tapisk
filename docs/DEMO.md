@@ -64,7 +64,7 @@ mtx -f /dev/sg2 load 1 # Loads tape drive (here: `/dev/nst4`)
 mt -f /dev/nst4 setblk 512
 mt -f /dev/nst4 status
 
-mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && rm -f /tmp/tapisk.db && go run . --dev /dev/nst4 --index /tmp/tapisk.db
+mt -f /dev/nst4 rewind && mt -f /dev/nst4 erase && sudo rm -f /tmp/tapisk.db && go build -o /tmp/tapisk ./cmd/tapisk && sudo /tmp/tapisk --drive /dev/nst4 --device /dev/nbd0 --index /tmp/tapisk.db
 
 sudo umount ~/Downloads/mnt; sudo $(which go-nbd-example-client) --file /dev/nbd0
 
