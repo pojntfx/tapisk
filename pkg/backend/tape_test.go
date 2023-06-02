@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pojntfx/r3map/pkg/chunks"
 	"github.com/pojntfx/tapisk/pkg/index"
 )
 
@@ -53,17 +54,24 @@ func TestReadAtTable(t *testing.T) {
 		}
 	}
 
-	tb := &TapeBackend{
-		drive:     f,
-		index:     index,
-		size:      size,
-		blocksize: blockSize,
-		seekToBlock: func(drive *os.File, block int32) error {
-			_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
+	tb := chunks.NewArbitraryReadWriterAt(
+		chunks.NewChunkedReadWriterAt(
+			&TapeBackend{
+				drive:     f,
+				index:     index,
+				size:      size,
+				blocksize: blockSize,
+				seekToBlock: func(drive *os.File, block int32) error {
+					_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
 
-			return err
-		},
-	}
+					return err
+				},
+			},
+			int64(blockSize),
+			size/(int64(blockSize)),
+		),
+		int64(blockSize),
+	)
 
 	testCases := []struct {
 		name   string
@@ -213,25 +221,32 @@ func TestReadAtOverwrites(t *testing.T) {
 		}
 	}
 
-	tb := &TapeBackend{
-		drive:     f,
-		index:     index,
-		size:      size,
-		blocksize: blockSize,
-		seekToBlock: func(drive *os.File, block int32) error {
-			_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
+	tb := chunks.NewArbitraryReadWriterAt(
+		chunks.NewChunkedReadWriterAt(
+			&TapeBackend{
+				drive:     f,
+				index:     index,
+				size:      size,
+				blocksize: blockSize,
+				seekToBlock: func(drive *os.File, block int32) error {
+					_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
 
-			return err
-		},
-	}
+					return err
+				},
+			},
+			int64(blockSize),
+			size/(int64(blockSize)),
+		),
+		int64(blockSize),
+	)
 
 	testCases := []struct {
 		name string
-		run  func(tb *TapeBackend, t *testing.T) error
+		run  func(tb chunks.ReadWriterAt, t *testing.T) error
 	}{
 		{
 			name: "Read and write less than a block",
-			run: func(tb *TapeBackend, t *testing.T) error {
+			run: func(tb chunks.ReadWriterAt, t *testing.T) error {
 				// Read back (2nd block + 2 bytes in)
 				{
 					got := make([]byte, len(expect))
@@ -310,38 +325,45 @@ func TestWriteAt(t *testing.T) {
 	}
 	defer index.Close()
 
-	tb := &TapeBackend{
-		drive:     f,
-		index:     index,
-		size:      size,
-		blocksize: blockSize,
-		seekToBlock: func(drive *os.File, block int32) error {
-			_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
+	tb := chunks.NewArbitraryReadWriterAt(
+		chunks.NewChunkedReadWriterAt(
+			&TapeBackend{
+				drive:     f,
+				index:     index,
+				size:      size,
+				blocksize: blockSize,
+				seekToBlock: func(drive *os.File, block int32) error {
+					_, err := drive.Seek(int64(block)*int64(blockSize), io.SeekStart)
 
-			return err
-		},
-		seekToEOD: func(drive *os.File) error {
-			_, err := drive.Seek(0, io.SeekEnd)
+					return err
+				},
+				seekToEOD: func(drive *os.File) error {
+					_, err := drive.Seek(0, io.SeekEnd)
 
-			return err
-		},
-		tell: func(drive *os.File) (uint64, error) {
-			curr, err := drive.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return 0, err
-			}
+					return err
+				},
+				tell: func(drive *os.File) (uint64, error) {
+					curr, err := drive.Seek(0, io.SeekCurrent)
+					if err != nil {
+						return 0, err
+					}
 
-			return uint64(curr / int64(blockSize)), nil
-		},
-	}
+					return uint64(curr / int64(blockSize)), nil
+				},
+			},
+			int64(blockSize),
+			size/(int64(blockSize)),
+		),
+		int64(blockSize),
+	)
 
 	testCases := []struct {
 		name string
-		run  func(tb *TapeBackend, t *testing.T) error
+		run  func(tb chunks.ReadWriterAt, t *testing.T) error
 	}{
 		{
 			name: "Read and write less than a block",
-			run: func(tb *TapeBackend, t *testing.T) error {
+			run: func(tb chunks.ReadWriterAt, t *testing.T) error {
 				// Write and read initial contents
 				{
 					expect := []byte("Hello, world!")
@@ -409,7 +431,7 @@ func TestWriteAt(t *testing.T) {
 		},
 		{
 			name: "Read and write one block",
-			run: func(tb *TapeBackend, t *testing.T) error {
+			run: func(tb chunks.ReadWriterAt, t *testing.T) error {
 				// Write and read exactly one block
 				{
 					expect := bytes.Repeat([]byte{5}, int(blockSize))
@@ -449,7 +471,7 @@ func TestWriteAt(t *testing.T) {
 		},
 		{
 			name: "Read and write more than one block",
-			run: func(tb *TapeBackend, t *testing.T) error {
+			run: func(tb chunks.ReadWriterAt, t *testing.T) error {
 				// Write and read more than one block
 				{
 					expect := append(bytes.Repeat([]byte{5}, int(blockSize)), bytes.Repeat([]byte{6}, int(blockSize))...)

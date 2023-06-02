@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/pojntfx/go-nbd/pkg/server"
+	bbackend "github.com/pojntfx/r3map/pkg/backend"
+	"github.com/pojntfx/r3map/pkg/chunks"
 	"github.com/pojntfx/r3map/pkg/device"
 	"github.com/pojntfx/tapisk/pkg/backend"
 	idx "github.com/pojntfx/tapisk/pkg/index"
@@ -52,7 +54,18 @@ func main() {
 	}
 	defer i.Close()
 
-	b := backend.NewTapeBackend(driveFile, i, *size, blocksize, *verbose)
+	rawBackend := backend.NewTapeBackend(driveFile, i, *size, blocksize, *verbose)
+
+	chunkedRwat := chunks.NewArbitraryReadWriterAt(
+		chunks.NewChunkedReadWriterAt(
+			rawBackend,
+			int64(blocksize),
+			*size/(int64(blocksize)),
+		),
+		int64(blocksize),
+	)
+
+	b := bbackend.NewReaderAtBackend(chunkedRwat, rawBackend.Size, rawBackend.Sync, false)
 
 	devFile, err := os.Open(*devPath)
 	if err != nil {
