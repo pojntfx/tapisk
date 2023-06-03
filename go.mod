@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/pojntfx/go-nbd v0.1.9
-	github.com/pojntfx/r3map v0.0.0-20230603094517-cfac762493e6
+	github.com/pojntfx/r3map v0.0.0-20230603114412-e66bea7d0ba2
 	go.etcd.io/bbolt v1.3.7
 )
 
