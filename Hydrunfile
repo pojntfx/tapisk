@@ -52,7 +52,7 @@ if [ "$1" = "gccgo" ]; then
     install /tmp/bagccgop /usr/local/bin
 
     # Build
-    GOFLAGS='-gccgoflags=-static' bagccgop -x '(linux/alpha|linux/mipsle)' -j1 -b "$2" -n -s 'make' -p "make build/$2 DST=\$DST" -d out
+    GOFLAGS='-gccgoflags=-static' bagccgop -x '(linux/alpha|linux/mipsle|linux/ppc)' -j1 -b "$2" -n -s 'make' -p "make build/$2 DST=\$DST" -d out
 
     exit 0
 fi
