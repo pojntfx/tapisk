@@ -3,8 +3,8 @@
 ## Virtual Tape Library/Drive Setup
 
 ```shell
-git clone https://github.com/markh794/mhvtl.git
-cd mhvtl/
+git clone https://github.com/markh794/mhvtl.git /tmp/mhvtl
+cd /tmp/mhvtl
 
 cd kernel
 

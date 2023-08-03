@@ -2,25 +2,29 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
+	"sync"
 
 	"github.com/pojntfx/go-nbd/pkg/server"
-	bbackend "github.com/pojntfx/r3map/pkg/backend"
+	lbackend "github.com/pojntfx/r3map/pkg/backend"
 	"github.com/pojntfx/r3map/pkg/chunks"
-	"github.com/pojntfx/r3map/pkg/device"
+	"github.com/pojntfx/r3map/pkg/mount"
+	"github.com/pojntfx/r3map/pkg/utils"
 	"github.com/pojntfx/tapisk/pkg/backend"
 	idx "github.com/pojntfx/tapisk/pkg/index"
 	"github.com/pojntfx/tapisk/pkg/mtio"
 )
 
 func main() {
-	drivePath := flag.String("drive", "/dev/nst0", "Path to tape drive file to connect to")
-	index := flag.String("index", "tapisk.db", "Path to index file to use")
-	bucket := flag.String("bucket", "tapsik", "Bucket in index file to use")
+	drivePath := flag.String("drive", "/dev/nst0", "Path to tape drive")
 	size := flag.Int64("size", 500*1024*1024, "Size of the tape (native size, not compressed size)")
-	devPath := flag.String("device", "/dev/nbd0", "Path to NBD device file to use")
-	readOnly := flag.Bool("read-only", false, "Whether the device should be read-only")
+
+	index := flag.String("index", "tapisk.db", "Path to index file")
+	bucket := flag.String("bucket", "tapsik", "Bucket in index file")
+
+	readOnly := flag.Bool("read-only", false, "Whether the block device should be read-only")
+
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
 	flag.Parse()
@@ -42,7 +46,7 @@ func main() {
 	}
 	defer driveFile.Close()
 
-	blocksize, err := mtio.GetBlocksize(driveFile)
+	chunkSize, err := mtio.GetBlocksize(driveFile)
 	if err != nil {
 		panic(err)
 	}
@@ -54,39 +58,59 @@ func main() {
 	}
 	defer i.Close()
 
-	rawBackend := backend.NewTapeBackend(driveFile, i, *size, blocksize, *verbose)
-
-	chunkedRwat := chunks.NewArbitraryReadWriterAt(
+	rawBackend := backend.NewTapeBackend(driveFile, i, *size, chunkSize, *verbose)
+	b := lbackend.NewReaderAtBackend(
 		chunks.NewChunkedReadWriterAt(
 			rawBackend,
-			int64(blocksize),
-			*size/(int64(blocksize)),
+			int64(chunkSize),
+			*size/(int64(chunkSize)),
 		),
-		int64(blocksize),
+		rawBackend.Size,
+		rawBackend.Sync,
+		false,
 	)
 
-	b := bbackend.NewReaderAtBackend(chunkedRwat, rawBackend.Size, rawBackend.Sync, false)
+	devPath, err := utils.FindUnusedNBDDevice()
+	if err != nil {
+		panic(err)
+	}
 
-	devFile, err := os.Open(*devPath)
+	devFile, err := os.Open(devPath)
 	if err != nil {
 		panic(err)
 	}
 	defer devFile.Close()
 
-	dev := device.NewDevice(
+	dev := mount.NewDirectPathMount(
 		b,
 		devFile,
 
 		&server.Options{
-			ReadOnly:           *readOnly,
-			MinimumBlockSize:   uint32(blocksize),
-			PreferredBlockSize: uint32(blocksize),
-			MaximumBlockSize:   uint32(blocksize),
+			ReadOnly: *readOnly,
+
+			MinimumBlockSize:   uint32(chunkSize),
+			PreferredBlockSize: uint32(chunkSize),
+			MaximumBlockSize:   uint32(chunkSize),
 		},
 		nil,
 	)
 
-	errs := make(chan error)
+	var (
+		errs = make(chan error)
+		wg   sync.WaitGroup
+	)
+	defer wg.Wait()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for err := range errs {
+			if err != nil {
+				panic(err)
+			}
+		}
+	}()
 
 	go func() {
 		if err := dev.Wait(); err != nil {
@@ -94,6 +118,8 @@ func main() {
 
 			return
 		}
+
+		close(errs)
 	}()
 
 	defer dev.Close()
@@ -101,11 +127,5 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("Ready on", *devPath)
-
-	for range errs {
-		if err != nil {
-			panic(err)
-		}
-	}
+	fmt.Println(devPath)
 }
