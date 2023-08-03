@@ -27,12 +27,13 @@ jobs:
             flags: ""
             cmd: ./Hydrunfile go tapisk
             dst: out/*
-          - id: gccgo
-            src: .
-            os: ghcr.io/pojntfx/bagccgop-base-sid
-            flags: -e '--privileged'
-            cmd: ./Hydrunfile gccgo tapisk
-            dst: out/*
+          # Disabled due to "error obtaining VCS status: exit status 128" error
+          # - id: gccgo
+          #   src: .
+          #   os: ghcr.io/pojntfx/bagccgop-base-sid
+          #   flags: -e '--privileged'
+          #   cmd: ./Hydrunfile gccgo tapisk
+          #   dst: out/*
 
     steps:
       - name: Maximize build space
@@ -80,7 +81,7 @@ jobs:
         uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: ${{ steps.extract_branch.outputs.branch }}
+          automatic_release_tag: release-${{ steps.extract_branch.outputs.branch }}
           prerelease: true
           files: |
             /tmp/out/*/*
