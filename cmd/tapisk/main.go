@@ -60,10 +60,13 @@ func main() {
 
 	rawBackend := backend.NewTapeBackend(driveFile, i, *size, chunkSize, *verbose)
 	b := lbackend.NewReaderAtBackend(
-		chunks.NewChunkedReadWriterAt(
-			rawBackend,
+		chunks.NewArbitraryReadWriterAt(
+			chunks.NewChunkedReadWriterAt(
+				rawBackend,
+				int64(chunkSize),
+				*size/(int64(chunkSize)),
+			),
 			int64(chunkSize),
-			*size/(int64(chunkSize)),
 		),
 		rawBackend.Size,
 		rawBackend.Sync,
@@ -128,4 +131,6 @@ func main() {
 	}
 
 	fmt.Println(devPath)
+
+	select {}
 }
