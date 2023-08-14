@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"os/signal"
 	"sync"
+	"time"
 
+	gbackend "github.com/pojntfx/go-nbd/pkg/backend"
 	"github.com/pojntfx/go-nbd/pkg/server"
-	lbackend "github.com/pojntfx/r3map/pkg/backend"
+	rbackend "github.com/pojntfx/r3map/pkg/backend"
 	"github.com/pojntfx/r3map/pkg/chunks"
 	"github.com/pojntfx/r3map/pkg/mount"
-	"github.com/pojntfx/r3map/pkg/utils"
 	"github.com/pojntfx/tapisk/pkg/backend"
 	idx "github.com/pojntfx/tapisk/pkg/index"
 	"github.com/pojntfx/tapisk/pkg/mtio"
@@ -20,14 +24,22 @@ func main() {
 	drivePath := flag.String("drive", "/dev/nst0", "Path to tape drive")
 	size := flag.Int64("size", 500*1024*1024, "Size of the tape (native size, not compressed size)")
 
-	index := flag.String("index", "tapisk.db", "Path to index file")
+	indexPath := flag.String("index", "tapisk.db", "Path to index file")
 	bucket := flag.String("bucket", "tapsik", "Bucket in index file")
+
+	cachePath := flag.String("cache", "tapisk.img", "Path to cache file")
+	pullWorkers := flag.Int64("pull-workers", 1, "Amount of background pull workers (negative values disable background pull)")
+	pushWorkers := flag.Int64("push-workers", 1, "Amount of background push workers (negative values disable background push)")
+	pushInterval := flag.Duration("push-interval", 5*time.Minute, "Interval for pushing changes from the cache to the tape")
 
 	readOnly := flag.Bool("read-only", false, "Whether the block device should be read-only")
 
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
 	flag.Parse()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	var (
 		driveFile *os.File
@@ -46,47 +58,59 @@ func main() {
 	}
 	defer driveFile.Close()
 
+	cacheFile, err := os.OpenFile(*cachePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	defer cacheFile.Close()
+
+	if err := cacheFile.Truncate(*size); err != nil {
+		panic(err)
+	}
+
+	index := idx.NewBboltIndex(*indexPath, *bucket)
+
+	if err := index.Open(); err != nil {
+		panic(err)
+	}
+	defer index.Close()
+
 	chunkSize, err := mtio.GetBlocksize(driveFile)
 	if err != nil {
 		panic(err)
 	}
 
-	i := idx.NewBboltIndex(*index, *bucket)
+	b := backend.NewTapeBackend(driveFile, index, *size, chunkSize, *verbose)
 
-	if err := i.Open(); err != nil {
-		panic(err)
-	}
-	defer i.Close()
+	mnt := mount.NewManagedFileMount(
+		ctx,
 
-	rawBackend := backend.NewTapeBackend(driveFile, i, *size, chunkSize, *verbose)
-	b := lbackend.NewReaderAtBackend(
-		chunks.NewArbitraryReadWriterAt(
-			chunks.NewChunkedReadWriterAt(
-				rawBackend,
+		rbackend.NewReaderAtBackend(
+			chunks.NewArbitraryReadWriterAt(
+				chunks.NewChunkedReadWriterAt(
+					b,
+					int64(chunkSize),
+					*size/(int64(chunkSize)),
+				),
 				int64(chunkSize),
-				*size/(int64(chunkSize)),
 			),
-			int64(chunkSize),
+			b.Size,
+			b.Sync,
+			false,
 		),
-		rawBackend.Size,
-		rawBackend.Sync,
-		false,
-	)
+		gbackend.NewFileBackend(cacheFile),
 
-	devPath, err := utils.FindUnusedNBDDevice()
-	if err != nil {
-		panic(err)
-	}
+		&mount.ManagedMountOptions{
+			ChunkSize: int64(chunkSize),
 
-	devFile, err := os.Open(devPath)
-	if err != nil {
-		panic(err)
-	}
-	defer devFile.Close()
+			PullWorkers: *pullWorkers,
 
-	dev := mount.NewDirectPathMount(
-		b,
-		devFile,
+			PushWorkers:  *pushWorkers,
+			PushInterval: *pushInterval,
+
+			Verbose: *verbose,
+		},
+		nil,
 
 		&server.Options{
 			ReadOnly: *readOnly,
@@ -98,39 +122,33 @@ func main() {
 		nil,
 	)
 
-	var (
-		errs = make(chan error)
-		wg   sync.WaitGroup
-	)
-	defer wg.Wait()
-
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
-		for err := range errs {
-			if err != nil {
-				panic(err)
-			}
+		if err := mnt.Wait(); err != nil {
+			panic(err)
 		}
 	}()
 
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt)
 	go func() {
-		if err := dev.Wait(); err != nil {
-			errs <- err
+		<-done
 
-			return
-		}
+		log.Println("Exiting gracefully")
 
-		close(errs)
+		_ = mnt.Close()
 	}()
 
-	defer dev.Close()
-	if err := dev.Open(); err != nil {
+	defer mnt.Close()
+	path, err := mnt.Open()
+	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(devPath)
+	fmt.Println(path)
 
-	select {}
+	wg.Wait()
 }
