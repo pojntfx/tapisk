@@ -19,8 +19,8 @@ jobs:
             src: .
             os: golang:bullseye
             flags: ""
-            cmd: go test ./...
-            dst: out/*
+            cmd: GOFLAGS="-short" ./Hydrunfile test
+            dst: out/nonexistent
           - id: go
             src: .
             os: golang:bullseye
